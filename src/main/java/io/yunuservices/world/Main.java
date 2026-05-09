@@ -41,6 +41,12 @@ public final class Main extends JavaPlugin {
     }
 
     private boolean isCanvasRuntime() {
-        return true;
+        try {
+            Class.forName("io.canvasmc.canvas.WorldUnloadResult");
+            Bukkit.getServer().getClass().getMethod("unloadWorldAsync", String.class, boolean.class, java.util.function.Consumer.class);
+            return true;
+        } catch (final ReflectiveOperationException ex) {
+            return false;
+        }
     }
 }

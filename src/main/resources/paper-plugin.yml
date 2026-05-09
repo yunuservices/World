@@ -7,7 +7,6 @@ api-version: "1.21.11"
 authors:
   - yunuservices
 canvas-supported: true
-folia-supported: true
 default-permission: op
 permissions:
   world.*:
