@@ -1,15 +1,24 @@
 # World
 
-`World` is a Canvas-only world manager plugin for modern Paper-compatible servers running Canvas. It uses the Canvas world load/unload API, Cloud Paper commands, async-safe scheduling, and runtime-generated configuration files.
+`World` is a world manager plugin for **Paper** and **Canvas** servers. It uses the Canvas asynchronous world unload API when available, falls back to standard Bukkit world management on Paper, and provides Cloud Paper commands with async-safe scheduling.
+
+## Requirements
+
+- Java 25
+- Paper 1.21+ **or** Canvas 26.1.2+
+- Folia is **not supported** (the plugin disables itself on Folia)
+
+[![CI](https://github.com/yunuservices/World/actions/workflows/ci.yml/badge.svg)](https://github.com/yunuservices/World/actions/workflows/ci.yml)
 
 ## Features
 
 - Create, load, unload, import, copy, delete, and inspect worlds
-- Canvas-aware async world management flow
+- Runtime-aware world management (asynchronous unload on Canvas, synchronous fallback on Paper)
 - World spawn management
 - Portal routing between loaded worlds
 - Cross-server transfer routing through portal events
 - Async command suggestions for worlds and players
+- Paper and Canvas runtime support
 
 ## Commands
 
@@ -19,8 +28,9 @@
 | `/world info <name>` | Show details for a world, including tracked portal rules. |
 | `/world create <name> [environment] [seed]` | Create and load a new world. |
 | `/world load <name> [environment]` | Load an existing world from disk. |
-| `/world unload <name> [save]` | Unload a loaded world through Canvas. |
+| `/world unload <name> [save]` | Unload a loaded world. Uses the async API on Canvas and the synchronous API on Paper. |
 | `/world delete <name> [save]` | Unload and delete a world folder. |
+| `/world untrack <name>` | Remove a world from `worlds.yml` without deleting its files. |
 | `/world import <name> [environment]` | Track an existing world in `worlds.yml`. |
 | `/world copy <source> <target> [load]` | Safely copy a world. Loaded source worlds are unloaded before copy and restored after copy. |
 | `/world tp <world> [player]` | Teleport yourself or another player to a world spawn. |
@@ -46,6 +56,7 @@
 | `world.command.load` | `/world load` |
 | `world.command.unload` | `/world unload` |
 | `world.command.delete` | `/world delete` |
+| `world.command.untrack` | `/world untrack` |
 | `world.command.import` | `/world import` |
 | `world.command.copy` | `/world copy` |
 | `world.command.tp` | `/world tp` |
@@ -110,6 +121,8 @@ worlds:
 
 ## Building
 
+This project requires **Java 25**. Make sure `JAVA_HOME` points to a Java 25 installation before building.
+
 ```bash
 ./gradlew build --no-daemon
 ```
@@ -130,4 +143,7 @@ build/libs/World-1.0.0-SNAPSHOT.jar
 
 - `copy` is conservative: if the source world is loaded, the plugin unloads it before copying and reloads it afterward.
 - Cross-server transfer depends on runtime support for `Player#transfer`.
+- **Canvas** uses the asynchronous `unloadWorldAsync` API for world unloads.
+- **Paper** uses the standard synchronous `Bukkit.unloadWorld` API. Unloading large worlds may cause a short tick freeze.
+- **Folia** is intentionally unsupported because it lacks an asynchronous world unload API. The plugin will disable itself on Folia with a console message.
 - Licensed under the GNU Affero General Public License v3.0.
