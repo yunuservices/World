@@ -14,7 +14,7 @@ public final class Main extends JavaPlugin {
         final RuntimeType runtimeType = this.detectRuntime();
         if (runtimeType == RuntimeType.FOLIA) {
             this.getLogger().severe("Folia is not supported because it lacks an asynchronous world unload API. "
-                + "Please use Paper or Canvas.");
+                + "Please consider using Paper/Canvas or their forks.");
             Bukkit.getPluginManager().disablePlugin(this);
             return;
         }
