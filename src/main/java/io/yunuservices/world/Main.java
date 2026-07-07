@@ -12,7 +12,14 @@ public final class Main extends JavaPlugin {
     @Override
     public void onEnable() {
         final RuntimeType runtimeType = this.detectRuntime();
-        final Scheduler scheduler = runtimeType.hasFoliaScheduler()
+        if (runtimeType == RuntimeType.FOLIA) {
+            this.getLogger().severe("Folia is not supported because it lacks an asynchronous world unload API. "
+                + "Please use Paper or Canvas.");
+            Bukkit.getPluginManager().disablePlugin(this);
+            return;
+        }
+
+        final Scheduler scheduler = runtimeType == RuntimeType.CANVAS
             ? new FoliaScheduler()
             : new BukkitScheduler();
         final WorldUnloader worldUnloader = runtimeType == RuntimeType.CANVAS
@@ -70,10 +77,6 @@ public final class Main extends JavaPlugin {
         CANVAS,
         FOLIA,
         PAPER;
-
-        boolean hasFoliaScheduler() {
-            return this == CANVAS || this == FOLIA;
-        }
 
         String displayName() {
             return switch (this) {
