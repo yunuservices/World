@@ -24,14 +24,16 @@ public final class WorldsFileStore {
     private static final String LEGACY_ROOT = "worlds";
 
     private final Plugin plugin;
+    private final Scheduler scheduler;
     private final Path file;
     private final Object lock = new Object();
     private final AtomicBoolean flushScheduled = new AtomicBoolean();
     private YamlConfiguration configuration;
     private String pendingSnapshot;
 
-    public WorldsFileStore(final Plugin plugin) {
+    public WorldsFileStore(final Plugin plugin, final Scheduler scheduler) {
         this.plugin = plugin;
+        this.scheduler = scheduler;
         this.file = plugin.getDataFolder().toPath().resolve("worlds.yml");
         this.reload();
     }
@@ -436,7 +438,7 @@ public final class WorldsFileStore {
         if (!this.flushScheduled.compareAndSet(false, true)) {
             return;
         }
-        Bukkit.getAsyncScheduler().runNow(this.plugin, task -> {
+        this.scheduler.executeAsync(this.plugin, () -> {
             try {
                 for (;;) {
                     final String snapshot = this.takePendingSnapshot();

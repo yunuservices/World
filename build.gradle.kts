@@ -13,25 +13,28 @@ repositories {
     maven("https://repo.papermc.io/repository/maven-public/") {
         name = "papermc"
     }
+    maven("https://maven.canvasmc.io/releases") {
+        name = "canvas-releases"
+    }
     maven("https://maven.canvasmc.io/snapshots") {
-        name = "canvas"
+        name = "canvas-snapshots"
     }
 }
 
 dependencies {
-    compileOnly("io.canvasmc.canvas:canvas-api:1.21.11-R0.1-SNAPSHOT")
-    compileOnly("net.kyori:adventure-text-minimessage:4.26.1")
-    implementation("org.incendo:cloud-paper:2.0.0-beta.14")
+    compileOnly("io.canvasmc.canvas:canvas-api:26.1.2.build.836-stable")
+    compileOnly("net.kyori:adventure-text-minimessage:5.2.0")
+    implementation("org.incendo:cloud-paper:2.0.0-beta.17")
     implementation("org.tomlj:tomlj:1.1.1")
 }
 
 java {
-    toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+    toolchain.languageVersion.set(JavaLanguageVersion.of(25))
 }
 
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = Charsets.UTF_8.name()
-    options.release.set(21)
+    options.release.set(25)
     options.compilerArgs.add("-parameters")
     options.compilerArgs.add("-Xlint:deprecation")
 }

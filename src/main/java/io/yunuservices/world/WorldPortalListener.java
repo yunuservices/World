@@ -14,11 +14,13 @@ public final class WorldPortalListener implements Listener {
     private final Plugin plugin;
     private final WorldsFileStore worldsFileStore;
     private final MessagesStore messagesStore;
+    private final Scheduler scheduler;
 
-    public WorldPortalListener(final Plugin plugin, final WorldsFileStore worldsFileStore, final MessagesStore messagesStore) {
+    public WorldPortalListener(final Plugin plugin, final WorldsFileStore worldsFileStore, final MessagesStore messagesStore, final Scheduler scheduler) {
         this.plugin = plugin;
         this.worldsFileStore = worldsFileStore;
         this.messagesStore = messagesStore;
+        this.scheduler = scheduler;
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -60,7 +62,7 @@ public final class WorldPortalListener implements Listener {
     }
 
     private void transfer(final Player player, final ServerTransferTarget transferTarget) {
-        player.getScheduler().execute(this.plugin, () -> {
+        this.scheduler.executeEntity(this.plugin, player, () -> {
             try {
                 player.transfer(transferTarget.host(), transferTarget.port());
             } catch (final NoSuchMethodError ex) {

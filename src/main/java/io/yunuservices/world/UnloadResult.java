@@ -1,0 +1,12 @@
+package io.yunuservices.world;
+
+public enum UnloadResult {
+    SUCCESS,
+    FAIL_PLAYERS_JOINING,
+    FAIL_PLAYERS_PRESENT,
+    FAIL_ALREADY_UNLOADING,
+    FAIL_IS_OVERWORLD,
+    FAIL_UNLOAD_EVENT,
+    FAIL_IS_SHUTDOWN,
+    FAIL_UNKNOWN
+}

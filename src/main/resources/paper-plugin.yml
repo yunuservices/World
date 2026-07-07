@@ -2,10 +2,11 @@ name: World
 version: "${version}"
 main: io.yunuservices.world.Main
 bootstrapper: io.yunuservices.world.WorldBootstrap
-description: A world management plugin for Canvas.
-api-version: "1.21.11"
+description: A world management plugin for Paper, Folia and Canvas.
+api-version: "1.21"
 authors:
   - yunuservices
+folia-supported: true
 canvas-supported: true
 default-permission: op
 permissions:

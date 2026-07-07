@@ -1,6 +1,5 @@
 package io.yunuservices.world;
 
-import io.canvasmc.canvas.WorldUnloadResult;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -22,7 +21,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
-public final class CanvasWorldManagerService implements WorldManagerService {
+public final class WorldManagerServiceImpl implements WorldManagerService {
 
     private static final long WORLD_DIRECTORY_CACHE_TTL_MILLIS = 1_500L;
 
@@ -31,19 +30,25 @@ public final class CanvasWorldManagerService implements WorldManagerService {
     private final PluginConfigStore configStore;
     private final WorldsFileStore worldsFileStore;
     private final MessagesStore messagesStore;
+    private final Scheduler scheduler;
+    private final WorldUnloader worldUnloader;
     private volatile DirectorySnapshot directorySnapshot;
 
-    public CanvasWorldManagerService(
+    public WorldManagerServiceImpl(
         final Plugin plugin,
         final PluginConfigStore configStore,
         final WorldsFileStore worldsFileStore,
-        final MessagesStore messagesStore
+        final MessagesStore messagesStore,
+        final Scheduler scheduler,
+        final WorldUnloader worldUnloader
     ) {
         this.plugin = plugin;
         this.worldContainer = Bukkit.getWorldContainer().toPath().toAbsolutePath().normalize();
         this.configStore = configStore;
         this.worldsFileStore = worldsFileStore;
         this.messagesStore = messagesStore;
+        this.scheduler = scheduler;
+        this.worldUnloader = worldUnloader;
         this.directorySnapshot = DirectorySnapshot.empty();
     }
 
@@ -162,7 +167,7 @@ public final class CanvasWorldManagerService implements WorldManagerService {
 
                 final World world = Bukkit.createWorld(creator);
                 if (world == null) {
-                    return OperationOutcome.failure(this.message("service.canvas_create_null"));
+                    return OperationOutcome.failure(this.message("service.create_null"));
                 }
 
                 this.worldsFileStore.trackWorld(world.getName(), world.getEnvironment(), null);
@@ -207,7 +212,7 @@ public final class CanvasWorldManagerService implements WorldManagerService {
                 );
 
                 if (world == null) {
-                    return OperationOutcome.failure(this.message("service.canvas_load_null"));
+                    return OperationOutcome.failure(this.message("service.load_null"));
                 }
 
                 this.worldsFileStore.trackWorld(world.getName(), world.getEnvironment(), null);
@@ -223,14 +228,14 @@ public final class CanvasWorldManagerService implements WorldManagerService {
         }
 
         final CompletableFuture<OperationOutcome<Void>> future = new CompletableFuture<>();
-        Bukkit.getGlobalRegionScheduler().execute(this.plugin, () -> {
+        this.scheduler.executeGlobal(this.plugin, () -> {
             final World world = Bukkit.getWorld(normalizedName);
             if (world == null) {
                 future.complete(OperationOutcome.failure(this.message("service.world_not_loaded", MessagePlaceholder.of("world", normalizedName))));
                 return;
             }
 
-            Bukkit.getServer().unloadWorldAsync(normalizedName, save, result -> future.complete(this.mapUnloadResult(normalizedName, result)));
+            this.worldUnloader.unload(normalizedName, save, result -> future.complete(this.mapUnloadResult(normalizedName, result)));
         });
         return future;
     }
@@ -602,11 +607,11 @@ public final class CanvasWorldManagerService implements WorldManagerService {
     public void reply(final CommandSender sender, final String message) {
         final net.kyori.adventure.text.Component component = this.messagesStore.deserialize(message);
         if (sender instanceof final Player player) {
-            player.getScheduler().execute(this.plugin, () -> player.sendMessage(component), null, 1L);
+            this.scheduler.executeEntity(this.plugin, player, () -> player.sendMessage(component), null, 1L);
             return;
         }
 
-        Bukkit.getGlobalRegionScheduler().execute(this.plugin, () -> sender.sendMessage(component));
+        this.scheduler.executeGlobal(this.plugin, () -> sender.sendMessage(component));
     }
 
     private CompletableFuture<Void> loadTrackedWorldOnStartup(final String worldName) {
@@ -663,7 +668,7 @@ public final class CanvasWorldManagerService implements WorldManagerService {
         }
 
         final CompletableFuture<OperationOutcome<Void>> future = new CompletableFuture<>();
-        Bukkit.getGlobalRegionScheduler().execute(this.plugin, () -> {
+        this.scheduler.executeGlobal(this.plugin, () -> {
             final World target = Bukkit.getWorld(normalizedWorldName);
             if (target == null) {
                 future.complete(OperationOutcome.failure(this.message("service.world_not_loaded", MessagePlaceholder.of("world", normalizedWorldName))));
@@ -702,7 +707,7 @@ public final class CanvasWorldManagerService implements WorldManagerService {
             );
     }
 
-    private OperationOutcome<Void> mapUnloadResult(final String name, final WorldUnloadResult result) {
+    private OperationOutcome<Void> mapUnloadResult(final String name, final UnloadResult result) {
         return switch (result) {
             case SUCCESS -> OperationOutcome.success(this.message("service.unload.success", MessagePlaceholder.of("world", name)), null);
             case FAIL_PLAYERS_JOINING -> OperationOutcome.failure(this.message("service.unload.players_joining"));
@@ -865,7 +870,7 @@ public final class CanvasWorldManagerService implements WorldManagerService {
 
     private <T> CompletableFuture<OperationOutcome<T>> runOnGlobalThread(final Supplier<OperationOutcome<T>> supplier) {
         final CompletableFuture<OperationOutcome<T>> future = new CompletableFuture<>();
-        Bukkit.getGlobalRegionScheduler().execute(this.plugin, () -> {
+        this.scheduler.executeGlobal(this.plugin, () -> {
             try {
                 future.complete(supplier.get());
             } catch (final Throwable throwable) {
@@ -877,7 +882,7 @@ public final class CanvasWorldManagerService implements WorldManagerService {
 
     private <T> CompletableFuture<T> runAsyncIo(final Supplier<T> supplier) {
         final CompletableFuture<T> future = new CompletableFuture<>();
-        Bukkit.getAsyncScheduler().runNow(this.plugin, task -> {
+        this.scheduler.executeAsync(this.plugin, () -> {
             try {
                 future.complete(supplier.get());
             } catch (final Throwable throwable) {
