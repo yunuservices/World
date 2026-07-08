@@ -82,18 +82,9 @@ public final class WorldCommands {
                 .required("world", StringParser.stringParser(), this.loadedWorldSuggestions())
                 .optional("player", StringParser.stringParser(), this.playerSuggestions())
                 .handler(this::handleTeleport));
-        // /world spawn - teleport the executor to the spawn of their current world
+        // /world spawn - teleport the executor to the configured spawn of their current world
         this.commandManager.command(this.base("spawn", "world.command.spawn")
-                .handler(this::handleSpawnInCurrentWorld));
-        // /world spawn <world> - teleport the executor to the spawn of the specified world
-        this.commandManager.command(this.base("spawn", "world.command.spawn")
-                .required("world", StringParser.stringParser(), this.loadedWorldSuggestions())
-                .handler(this::handleSpawnInTargetWorld));
-        // /world spawn <world> <player> - teleport another player to the spawn of the specified world
-        this.commandManager.command(this.base("spawn", "world.command.spawn")
-                .required("world", StringParser.stringParser(), this.loadedWorldSuggestions())
-                .required("player", StringParser.stringParser(), this.playerSuggestions())
-                .handler(this::handleSpawnOtherPlayerInTargetWorld));
+                .handler(this::handleSpawn));
         this.commandManager
                 .command(this.base("setspawn", "world.command.setspawn").handler(this::handleSetSpawnCurrent));
         this.commandManager.command(this.base("setspawn", "world.command.setspawn")
@@ -207,7 +198,7 @@ public final class WorldCommands {
         if (context.getOrDefault("environment", null) != null && environment == null) {
             return;
         }
-        this.handleAsync(sender, () -> this.service.loadWorld(name, environment),
+        this.handleAsync(sender, this.service.loadWorld(name, environment),
                 outcome -> List.of(outcome.message()));
     }
 
@@ -260,10 +251,10 @@ public final class WorldCommands {
                 outcome -> List.of(outcome.message()));
     }
 
-    private void handleSpawnInCurrentWorld(final CommandContext<CommandSourceStack> context) {
+    private void handleSpawn(final CommandContext<CommandSourceStack> context) {
         final CommandSender sender = this.sender(context);
         if (!(sender instanceof final Player player)) {
-            this.service.reply(sender, this.messagesStore.message("general.console_world_required"));
+            this.sendMessage(sender, this.messagesStore.message("general.console_world_required"));
             return;
         }
 
@@ -271,32 +262,10 @@ public final class WorldCommands {
                 outcome -> List.of(outcome.message()));
     }
 
-    private void handleSpawnInTargetWorld(final CommandContext<CommandSourceStack> context) {
-        final CommandSender sender = this.sender(context);
-        if (!(sender instanceof final Player player)) {
-            this.service.reply(sender, this.messagesStore.message("general.console_player_required"));
-            return;
-        }
-
-        this.handleAsync(sender, this.service.sendPlayerToSpawn(player, context.get("world")),
-                outcome -> List.of(outcome.message()));
-    }
-
-    private void handleSpawnOtherPlayerInTargetWorld(final CommandContext<CommandSourceStack> context) {
-        final CommandSender sender = this.sender(context);
-        final Player target = this.resolveTargetPlayer(sender, context.get("player"), "world.command.spawn.other");
-        if (target == null) {
-            return;
-        }
-
-        this.handleAsync(sender, this.service.sendPlayerToSpawn(target, context.get("world")),
-                outcome -> List.of(outcome.message()));
-    }
-
     private void handleSetSpawnCurrent(final CommandContext<CommandSourceStack> context) {
         final CommandSender sender = this.sender(context);
         if (!(sender instanceof final Player player)) {
-            this.service.reply(sender, this.messagesStore.message("general.console_world_coordinates_required"));
+            this.sendMessage(sender, this.messagesStore.message("general.console_world_coordinates_required"));
             return;
         }
 
@@ -309,7 +278,7 @@ public final class WorldCommands {
         final String worldName = context.get("world");
         final World world = Bukkit.getWorld(worldName);
         if (world == null) {
-            this.service.reply(sender,
+            this.sendMessage(sender,
                     this.messagesStore.message("service.world_not_loaded", this.placeholder("world", worldName)));
             return;
         }
@@ -323,7 +292,7 @@ public final class WorldCommands {
         final String worldName = context.get("world");
         final World world = Bukkit.getWorld(worldName);
         if (world == null) {
-            this.service.reply(sender,
+            this.sendMessage(sender,
                     this.messagesStore.message("service.world_not_loaded", this.placeholder("world", worldName)));
             return;
         }
@@ -370,19 +339,19 @@ public final class WorldCommands {
             if (sender instanceof final Player player) {
                 return player;
             }
-            this.service.reply(sender, this.messagesStore.message("general.console_player_required"));
+            this.sendMessage(sender, this.messagesStore.message("general.console_player_required"));
             return null;
         }
 
         final Player player = Bukkit.getPlayerExact(playerName);
         if (player == null) {
-            this.service.reply(sender,
+            this.sendMessage(sender,
                     this.messagesStore.message("general.player_not_found", this.placeholder("player", playerName)));
             return null;
         }
         if (!(sender instanceof Player) || !player.getUniqueId().equals(((Player) sender).getUniqueId())) {
             if (!sender.hasPermission(otherPermission)) {
-                this.service.reply(sender, this.messagesStore.message("general.permission_required_other",
+                this.sendMessage(sender, this.messagesStore.message("general.permission_required_other",
                         this.placeholder("permission", otherPermission)));
                 return null;
             }
@@ -400,13 +369,13 @@ public final class WorldCommands {
                 final String reason = unwrapped.getMessage() == null || unwrapped.getMessage().isBlank()
                         ? unwrapped.getClass().getSimpleName()
                         : unwrapped.getMessage();
-                this.service.reply(sender,
+                this.sendMessage(sender,
                         this.messagesStore.message("general.operation_failed", this.placeholder("reason", reason)));
                 return;
             }
 
             for (final String line : formatter.apply(outcome)) {
-                this.service.reply(sender, line);
+                this.sendMessage(sender, line);
             }
         });
     }
@@ -423,7 +392,7 @@ public final class WorldCommands {
             final String reason = unwrapped.getMessage() == null || unwrapped.getMessage().isBlank()
                     ? unwrapped.getClass().getSimpleName()
                     : unwrapped.getMessage();
-            this.service.reply(sender,
+            this.sendMessage(sender,
                     this.messagesStore.message("general.operation_failed", this.placeholder("reason", reason)));
             return;
         }
@@ -489,7 +458,7 @@ public final class WorldCommands {
         try {
             return World.Environment.valueOf(raw.toUpperCase(Locale.ROOT));
         } catch (final IllegalArgumentException ex) {
-            this.service.reply(sender,
+            this.sendMessage(sender,
                     this.messagesStore.message("general.invalid_environment", this.placeholder("input", raw)));
             return null;
         }
@@ -501,7 +470,7 @@ public final class WorldCommands {
             return portalKind;
         }
 
-        this.service.reply(sender,
+        this.sendMessage(sender,
                 this.messagesStore.message("general.invalid_portal", this.placeholder("input", raw)));
         return null;
     }
@@ -531,6 +500,10 @@ public final class WorldCommands {
                         || value.regionMatches(true, 0, normalizedToken, 0, normalizedToken.length()))
                 .limit(MAX_SUGGESTIONS)
                 .toList();
+    }
+
+    private void sendMessage(final CommandSender sender, final String message) {
+        sender.sendMessage(this.messagesStore.deserialize(message));
     }
 
     private String infoLine(final String labelKey, final Object value) {
