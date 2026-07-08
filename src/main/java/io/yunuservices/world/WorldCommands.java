@@ -276,12 +276,12 @@ public final class WorldCommands {
 
     private void handleSpawnInTargetWorld(final CommandContext<CommandSourceStack> context) {
         final CommandSender sender = this.sender(context);
-        final Player target = this.resolveTargetPlayer(sender, null, "world.command.spawn.other");
-        if (target == null) {
+        if (!(sender instanceof final Player player)) {
+            this.service.reply(sender, this.messagesStore.message("general.console_player_required"));
             return;
         }
 
-        this.handleAsync(sender, this.service.sendPlayerToSpawn(target, context.get("world")),
+        this.handleAsync(sender, this.service.sendPlayerToSpawn(player, context.get("world")),
                 outcome -> List.of(outcome.message()));
     }
 
