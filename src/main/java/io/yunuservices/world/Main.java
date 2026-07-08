@@ -39,6 +39,7 @@ public final class Main extends JavaPlugin {
             worldUnloader
         );
         Bukkit.getPluginManager().registerEvents(new WorldPortalListener(this, this.worldsFileStore, this.messagesStore, scheduler), this);
+        Bukkit.getPluginManager().registerEvents(new WorldGameModeListener(this.worldsFileStore), this);
         new WorldCommands(this, service).register();
         service.loadTrackedWorldsOnStartup();
         this.getLogger().info("World has been enabled. " + runtimeType.displayName() + " world manager is ready.");
