@@ -40,10 +40,7 @@ public final class WorldCommands {
         this.messagesStore = plugin.messagesStore();
         this.service = service;
         this.commandManager = PaperCommandManager.builder()
-                .executionCoordinator(
-                        ExecutionCoordinator.<CommandSourceStack>builder()
-                                .executor(ExecutionCoordinator.nonSchedulingExecutor())
-                                .build())
+                .executionCoordinator(ExecutionCoordinator.simpleCoordinator())
                 .buildOnEnable(plugin);
     }
 

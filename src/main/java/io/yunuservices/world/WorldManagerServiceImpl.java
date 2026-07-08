@@ -23,7 +23,7 @@ import org.bukkit.plugin.Plugin;
 
 public final class WorldManagerServiceImpl implements WorldManagerService {
 
-    private static final long WORLD_DIRECTORY_CACHE_TTL_MILLIS = 1_500L;
+    private static final long WORLD_DIRECTORY_CACHE_TTL_MILLIS = 10_000L;
 
     private final Plugin plugin;
     private final Path worldContainer;
