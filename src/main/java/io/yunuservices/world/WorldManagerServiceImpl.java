@@ -14,6 +14,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 import org.bukkit.Bukkit;
+import org.bukkit.Difficulty;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
@@ -433,6 +435,50 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
     }
 
     @Override
+    public CompletableFuture<OperationOutcome<Void>> setDifficulty(final String worldName, final Difficulty difficulty) {
+        final String normalizedName = this.normalizeWorldName(worldName).orElse(null);
+        if (normalizedName == null) {
+            return CompletableFuture.completedFuture(this.invalidWorldNameOutcome(worldName));
+        }
+
+        return this.runOnGlobalThread(() -> {
+            final World world = Bukkit.getWorld(normalizedName);
+            if (world == null) {
+                return OperationOutcome.<Void>failure(this.message("service.world_not_loaded", MessagePlaceholder.of("world", normalizedName)));
+            }
+
+            world.setDifficulty(difficulty);
+            this.worldsFileStore.rememberDifficulty(world.getName(), difficulty);
+            return OperationOutcome.<Void>success(this.message("service.difficulty_updated",
+                MessagePlaceholder.of("world", world.getName()),
+                MessagePlaceholder.of("difficulty", difficulty.name())), null);
+        });
+    }
+
+    @Override
+    public CompletableFuture<OperationOutcome<Void>> setGameMode(final String worldName, final GameMode gameMode) {
+        final String normalizedName = this.normalizeWorldName(worldName).orElse(null);
+        if (normalizedName == null) {
+            return CompletableFuture.completedFuture(this.invalidWorldNameOutcome(worldName));
+        }
+
+        return this.runOnGlobalThread(() -> {
+            final World world = Bukkit.getWorld(normalizedName);
+            if (world == null) {
+                return OperationOutcome.<Void>failure(this.message("service.world_not_loaded", MessagePlaceholder.of("world", normalizedName)));
+            }
+
+            for (final Player player : world.getPlayers()) {
+                player.setGameMode(gameMode);
+            }
+            this.worldsFileStore.rememberGameMode(world.getName(), gameMode);
+            return OperationOutcome.<Void>success(this.message("service.game_mode_updated",
+                MessagePlaceholder.of("world", world.getName()),
+                MessagePlaceholder.of("game_mode", gameMode.name())), null);
+        });
+    }
+
+    @Override
     public CompletableFuture<OperationOutcome<Void>> setPortalTarget(final String worldName, final PortalKind portalKind, final String targetWorldName) {
         final String normalizedWorldName = this.normalizeWorldName(worldName).orElse(null);
         if (normalizedWorldName == null) {
@@ -729,6 +775,8 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
                 this.worldsFileStore.isTracked(name),
                 directory,
                 this.worldsFileStore.environment(name),
+                this.worldsFileStore.difficultySummary(name),
+                this.worldsFileStore.gameModeSummary(name),
                 null,
                 null,
                 null,
@@ -744,6 +792,8 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
             this.worldsFileStore.isTracked(world.getName()),
             directory,
             world.getEnvironment(),
+            this.worldsFileStore.difficultySummary(world.getName()),
+            this.worldsFileStore.gameModeSummary(world.getName()),
             world.getPlayers().size(),
             world.isHardcore(),
             world.canGenerateStructures(),

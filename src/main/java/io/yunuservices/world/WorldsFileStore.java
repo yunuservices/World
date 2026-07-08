@@ -12,6 +12,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.bukkit.Bukkit;
+import org.bukkit.Difficulty;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.configuration.ConfigurationSection;
@@ -170,6 +172,80 @@ public final class WorldsFileStore {
             this.configuration.set(path + ".spawn.pitch", location.getPitch());
             this.persistAsync();
         }
+    }
+
+    public Difficulty difficulty(final String worldName) {
+        synchronized (this.lock) {
+            final String difficultyName = this.configuration.getString(this.readPath(worldName) + ".difficulty");
+            if (difficultyName == null || difficultyName.isBlank()) {
+                return null;
+            }
+
+            try {
+                return Difficulty.valueOf(difficultyName.toUpperCase(Locale.ROOT));
+            } catch (final IllegalArgumentException ex) {
+                this.plugin.getLogger().warning("Stored invalid difficulty '" + difficultyName + "' for world '" + worldName + "'.");
+                return null;
+            }
+        }
+    }
+
+    public void rememberDifficulty(final String worldName, final Difficulty difficulty) {
+        synchronized (this.lock) {
+            final String normalizedName = this.requireWorldName(worldName);
+            final String path = this.writePath(normalizedName);
+            final String value = difficulty.name();
+            if (value.equals(this.configuration.getString(path + ".difficulty"))
+                && normalizedName.equals(this.configuration.getString(path + ".name"))) {
+                return;
+            }
+
+            this.configuration.set(path + ".name", normalizedName);
+            this.configuration.set(path + ".difficulty", value);
+            this.persistAsync();
+        }
+    }
+
+    public GameMode gameMode(final String worldName) {
+        synchronized (this.lock) {
+            final String gameModeName = this.configuration.getString(this.readPath(worldName) + ".game-mode");
+            if (gameModeName == null || gameModeName.isBlank()) {
+                return null;
+            }
+
+            try {
+                return GameMode.valueOf(gameModeName.toUpperCase(Locale.ROOT));
+            } catch (final IllegalArgumentException ex) {
+                this.plugin.getLogger().warning("Stored invalid game mode '" + gameModeName + "' for world '" + worldName + "'.");
+                return null;
+            }
+        }
+    }
+
+    public void rememberGameMode(final String worldName, final GameMode gameMode) {
+        synchronized (this.lock) {
+            final String normalizedName = this.requireWorldName(worldName);
+            final String path = this.writePath(normalizedName);
+            final String value = gameMode.name();
+            if (value.equals(this.configuration.getString(path + ".game-mode"))
+                && normalizedName.equals(this.configuration.getString(path + ".name"))) {
+                return;
+            }
+
+            this.configuration.set(path + ".name", normalizedName);
+            this.configuration.set(path + ".game-mode", value);
+            this.persistAsync();
+        }
+    }
+
+    public String difficultySummary(final String worldName) {
+        final Difficulty difficulty = this.difficulty(worldName);
+        return difficulty == null ? "-" : difficulty.name();
+    }
+
+    public String gameModeSummary(final String worldName) {
+        final GameMode gameMode = this.gameMode(worldName);
+        return gameMode == null ? "-" : gameMode.name();
     }
 
     public void trackWorld(final String worldName, final World.Environment environment, final Location spawn) {

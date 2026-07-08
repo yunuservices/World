@@ -11,6 +11,8 @@ public record WorldDescriptor(
     boolean tracked,
     Path path,
     World.Environment environment,
+    String difficulty,
+    String gameMode,
     Integer playerCount,
     Boolean hardcore,
     Boolean generatesStructures,

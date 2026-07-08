@@ -2,6 +2,8 @@ package io.yunuservices.world;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import org.bukkit.Difficulty;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 
 import org.bukkit.World;
@@ -33,6 +35,10 @@ public interface WorldManagerService {
     CompletableFuture<OperationOutcome<Void>> sendPlayerToSpawn(Player player, String worldName);
 
     CompletableFuture<OperationOutcome<Void>> setSpawn(String worldName, Location location);
+
+    CompletableFuture<OperationOutcome<Void>> setDifficulty(String worldName, Difficulty difficulty);
+
+    CompletableFuture<OperationOutcome<Void>> setGameMode(String worldName, GameMode gameMode);
 
     CompletableFuture<OperationOutcome<Void>> setPortalTarget(String worldName, PortalKind portalKind, String targetWorldName);
 

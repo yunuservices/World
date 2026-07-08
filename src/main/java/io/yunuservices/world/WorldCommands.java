@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import org.bukkit.Bukkit;
+import org.bukkit.Difficulty;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.command.CommandSender;
@@ -18,6 +20,7 @@ import org.incendo.cloud.execution.ExecutionCoordinator;
 import org.incendo.cloud.paper.PaperCommandManager;
 import org.incendo.cloud.parser.standard.BooleanParser;
 import org.incendo.cloud.parser.standard.DoubleParser;
+import org.incendo.cloud.parser.standard.EnumParser;
 import org.incendo.cloud.parser.standard.FloatParser;
 import org.incendo.cloud.parser.standard.LongParser;
 import org.incendo.cloud.parser.standard.StringParser;
@@ -98,6 +101,14 @@ public final class WorldCommands {
                 .optional("yaw", FloatParser.floatParser())
                 .optional("pitch", FloatParser.floatParser())
                 .handler(this::handleSetSpawnExplicit));
+        this.commandManager.command(this.base("setdifficulty", "world.command.setdifficulty")
+                .required("world", StringParser.stringParser(), this.loadedWorldSuggestions())
+                .required("difficulty", EnumParser.enumParser(Difficulty.class))
+                .handler(this::handleSetDifficulty));
+        this.commandManager.command(this.base("setgamemode", "world.command.setgamemode")
+                .required("world", StringParser.stringParser(), this.loadedWorldSuggestions())
+                .required("gamemode", EnumParser.enumParser(GameMode.class))
+                .handler(this::handleSetGameMode));
         this.commandManager.command(this.setBase("portal", "world.command.set.portal")
                 .required("world", StringParser.stringParser(), this.loadedWorldSuggestions())
                 .required("portal", StringParser.stringParser(), this.portalSuggestions())
@@ -163,6 +174,8 @@ public final class WorldCommands {
                     this.infoLine("values.info.tracked", descriptor.tracked()),
                     this.infoLine("values.info.path", this.normalizePath(descriptor.path())),
                     this.infoLine("values.info.environment", this.nullSafe(descriptor.environment())),
+                    this.infoLine("values.info.difficulty", this.nullSafe(descriptor.difficulty())),
+                    this.infoLine("values.info.game_mode", this.nullSafe(descriptor.gameMode())),
                     this.infoLine("values.info.players", this.nullSafe(descriptor.playerCount())),
                     this.infoLine("values.info.hardcore", this.nullSafe(descriptor.hardcore())),
                     this.infoLine("values.info.generate_structures", this.nullSafe(descriptor.generatesStructures())),
@@ -301,6 +314,22 @@ public final class WorldCommands {
         final float pitch = context.getOrDefault("pitch", 0.0F);
         final Location location = new Location(world, context.get("x"), context.get("y"), context.get("z"), yaw, pitch);
         this.handleAsync(sender, this.service.setSpawn(worldName, location), outcome -> List.of(outcome.message()));
+    }
+
+    private void handleSetDifficulty(final CommandContext<CommandSourceStack> context) {
+        final CommandSender sender = this.sender(context);
+        this.handleAsync(
+                sender,
+                this.service.setDifficulty(context.get("world"), context.get("difficulty")),
+                outcome -> List.of(outcome.message()));
+    }
+
+    private void handleSetGameMode(final CommandContext<CommandSourceStack> context) {
+        final CommandSender sender = this.sender(context);
+        this.handleAsync(
+                sender,
+                this.service.setGameMode(context.get("world"), context.get("gamemode")),
+                outcome -> List.of(outcome.message()));
     }
 
     private void handleReload(final CommandContext<CommandSourceStack> context) {
