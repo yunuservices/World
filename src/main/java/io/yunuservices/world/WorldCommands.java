@@ -85,14 +85,18 @@ public final class WorldCommands {
                 .required("world", StringParser.stringParser(), this.loadedWorldSuggestions())
                 .optional("player", StringParser.stringParser(), this.playerSuggestions())
                 .handler(this::handleTeleport));
-        this.commandManager.command(this.base("spawn", "world.command.spawn").handler(this::handleSpawnSelf));
+        // /world spawn - teleport the executor to the spawn of their current world
+        this.commandManager.command(this.base("spawn", "world.command.spawn")
+                .handler(this::handleSpawnInCurrentWorld));
+        // /world spawn <world> - teleport the executor to the spawn of the specified world
         this.commandManager.command(this.base("spawn", "world.command.spawn")
                 .required("world", StringParser.stringParser(), this.loadedWorldSuggestions())
-                .handler(this::handleSpawnWorld));
+                .handler(this::handleSpawnInTargetWorld));
+        // /world spawn <world> <player> - teleport another player to the spawn of the specified world
         this.commandManager.command(this.base("spawn", "world.command.spawn")
                 .required("world", StringParser.stringParser(), this.loadedWorldSuggestions())
                 .required("player", StringParser.stringParser(), this.playerSuggestions())
-                .handler(this::handleSpawnOther));
+                .handler(this::handleSpawnOtherPlayerInTargetWorld));
         this.commandManager
                 .command(this.base("setspawn", "world.command.setspawn").handler(this::handleSetSpawnCurrent));
         this.commandManager.command(this.base("setspawn", "world.command.setspawn")
@@ -259,7 +263,7 @@ public final class WorldCommands {
                 outcome -> List.of(outcome.message()));
     }
 
-    private void handleSpawnSelf(final CommandContext<CommandSourceStack> context) {
+    private void handleSpawnInCurrentWorld(final CommandContext<CommandSourceStack> context) {
         final CommandSender sender = this.sender(context);
         if (!(sender instanceof final Player player)) {
             this.service.reply(sender, this.messagesStore.message("general.console_world_required"));
@@ -270,7 +274,7 @@ public final class WorldCommands {
                 outcome -> List.of(outcome.message()));
     }
 
-    private void handleSpawnWorld(final CommandContext<CommandSourceStack> context) {
+    private void handleSpawnInTargetWorld(final CommandContext<CommandSourceStack> context) {
         final CommandSender sender = this.sender(context);
         final Player target = this.resolveTargetPlayer(sender, null, "world.command.spawn.other");
         if (target == null) {
@@ -281,7 +285,7 @@ public final class WorldCommands {
                 outcome -> List.of(outcome.message()));
     }
 
-    private void handleSpawnOther(final CommandContext<CommandSourceStack> context) {
+    private void handleSpawnOtherPlayerInTargetWorld(final CommandContext<CommandSourceStack> context) {
         final CommandSender sender = this.sender(context);
         final Player target = this.resolveTargetPlayer(sender, context.get("player"), "world.command.spawn.other");
         if (target == null) {
