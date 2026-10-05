@@ -1,5 +1,6 @@
 package io.yunuservices.world;
 
+import io.papermc.paper.math.Position;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -16,6 +17,7 @@ import java.util.stream.Stream;
 import org.bukkit.Bukkit;
 import org.bukkit.Difficulty;
 import org.bukkit.GameMode;
+import org.bukkit.HeightMap;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
@@ -26,6 +28,7 @@ import org.bukkit.plugin.Plugin;
 public final class WorldManagerServiceImpl implements WorldManagerService {
 
     private static final long WORLD_DIRECTORY_CACHE_TTL_MILLIS = 10_000L;
+    private static final int PLACEHOLDER_SPAWN_Y = 100;
     private static final Path PAPER_METADATA = Path.of("data", "paper", "metadata.dat");
 
     private final Plugin plugin;
@@ -163,10 +166,16 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
                 if (seed != null) {
                     creator.seed(seed);
                 }
+                if (environment == World.Environment.NORMAL) {
+                    creator.forcedSpawnPosition(Position.fine(0.5, PLACEHOLDER_SPAWN_Y, 0.5), 0f, 0f);
+                }
 
                 final World world = Bukkit.createWorld(creator);
                 if (world == null) {
                     return OperationOutcome.failure(this.message("service.create_null"));
+                }
+                if (environment == World.Environment.NORMAL) {
+                    this.placeSpawnOnGround(world);
                 }
 
                 this.worldsFileStore.trackWorld(world.getName(), world.getEnvironment(), null);
@@ -739,6 +748,13 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
             }), () -> future.complete(OperationOutcome.failure(this.message("service.teleport_rejected"))), 1L);
         });
         return future;
+    }
+
+    private void placeSpawnOnGround(final World world) {
+        this.scheduler.executeRegion(this.plugin, world, 0, 0, () -> {
+            final int y = world.getHighestBlockYAt(0, 0, HeightMap.MOTION_BLOCKING_NO_LEAVES) + 1;
+            world.setSpawnLocation(0, y, 0);
+        });
     }
 
     private CompletableFuture<OperationOutcome<Void>> ensureUnloaded(final String name, final boolean save) {
