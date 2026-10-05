@@ -94,8 +94,6 @@ Initial `worlds.yml`:
 tracked-worlds: {}
 ```
 
-Older `worlds.yml` formats are migrated automatically on load.
-
 Example tracked world entry:
 
 ```yaml

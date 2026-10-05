@@ -22,7 +22,6 @@ import org.bukkit.plugin.Plugin;
 public final class WorldsFileStore {
 
     private static final String STORAGE_ROOT = "tracked-worlds";
-    private static final String LEGACY_ROOT = "worlds";
     private static final char SEPARATOR = '/';
 
     private final Plugin plugin;
@@ -54,18 +53,8 @@ public final class WorldsFileStore {
                 : new YamlConfiguration();
             this.configuration.options().pathSeparator(SEPARATOR);
 
-            boolean changed = false;
             if (!this.configuration.isConfigurationSection(STORAGE_ROOT)) {
                 this.configuration.createSection(STORAGE_ROOT);
-                changed = true;
-            }
-            changed |= this.migrateEntries(STORAGE_ROOT);
-            changed |= this.migrateEntries(LEGACY_ROOT);
-            if (this.configuration.contains(LEGACY_ROOT)) {
-                this.configuration.set(LEGACY_ROOT, null);
-                changed = true;
-            }
-            if (changed) {
                 this.persistAsync();
             }
         }
@@ -412,39 +401,6 @@ public final class WorldsFileStore {
 
     private String portalPath(final String worldName, final PortalKind portalKind) {
         return this.worldPath(worldName) + "/portals/" + portalKind.configKey();
-    }
-
-    private boolean migrateEntries(final String rootPath) {
-        final ConfigurationSection root = this.configuration.getConfigurationSection(rootPath);
-        if (root == null) {
-            return false;
-        }
-
-        boolean migrated = false;
-        for (final String key : new ArrayList<>(root.getKeys(false))) {
-            final String path = rootPath + SEPARATOR + key;
-            if (!this.configuration.isConfigurationSection(path)) {
-                continue;
-            }
-
-            final String name = WorldNameRules.normalize(this.configuration.getString(path + "/name", key)).orElse(null);
-            if (name == null) {
-                this.plugin.getLogger().warning("Skipping invalid tracked world entry at '" + path + "'.");
-                continue;
-            }
-
-            final String targetPath = this.worldPath(name);
-            if (path.equals(targetPath)) {
-                continue;
-            }
-            if (!this.configuration.isConfigurationSection(targetPath)) {
-                this.copySection(path, targetPath);
-                this.configuration.set(targetPath + "/name", name);
-            }
-            this.configuration.set(path, null);
-            migrated = true;
-        }
-        return migrated;
     }
 
     private String requireWorldName(final String worldName) {
