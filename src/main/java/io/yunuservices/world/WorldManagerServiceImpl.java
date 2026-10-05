@@ -256,15 +256,18 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
             return CompletableFuture.completedFuture(this.invalidWorldNameOutcome(name));
         }
 
-        return this.runAsyncIo(() -> Files.isDirectory(target))
-            .thenCompose(existsOnDisk -> this.ensureUnloaded(normalizedName, save).thenCompose(unloadOutcome -> {
-                if (!unloadOutcome.success()) {
-                    return CompletableFuture.completedFuture(unloadOutcome);
-                }
+        return this.runAsyncIo(() -> this.isWorldFolder(target))
+            .thenCompose(existsOnDisk -> {
                 if (!existsOnDisk) {
                     return CompletableFuture.completedFuture(
                         OperationOutcome.<Void>failure(this.message("service.world_folder_missing", MessagePlaceholder.of("world", normalizedName)))
                     );
+                }
+                return this.ensureUnloaded(normalizedName, save);
+            })
+            .thenCompose(unloadOutcome -> {
+                if (!unloadOutcome.success()) {
+                    return CompletableFuture.completedFuture(unloadOutcome);
                 }
 
                 return this.runAsyncIo(() -> {
@@ -279,7 +282,7 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
                     this.invalidateDirectorySnapshot();
                     return outcome;
                 }).exceptionally(throwable -> OperationOutcome.<Void>failure(this.normalizeThrowable(this.unwrap(throwable))));
-            }));
+            });
     }
 
     @Override
@@ -825,6 +828,10 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
         return Files.exists(directory.resolve("level.dat"));
     }
 
+    private boolean isWorldFolder(final Path directory) {
+        return Files.isDirectory(directory) && this.looksLikeWorldFolder(directory);
+    }
+
     private Path resolveWorldPath(final String worldName) {
         final String normalizedName = this.normalizeWorldName(worldName)
             .orElseThrow(() -> new IllegalArgumentException("Invalid managed world name: " + worldName));
@@ -969,7 +976,7 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
             return CompletableFuture.completedFuture(OperationOutcome.failure(this.message("service.copy_same_world")));
         }
 
-        return this.runAsyncIo(() -> new CopyDiskState(Files.isDirectory(sourcePath), Files.exists(targetPath)))
+        return this.runAsyncIo(() -> new CopyDiskState(this.isWorldFolder(sourcePath), Files.exists(targetPath)))
             .thenCompose(diskState -> {
                 if (!diskState.sourceExists()) {
                     return CompletableFuture.completedFuture(
