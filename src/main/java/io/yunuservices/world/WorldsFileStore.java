@@ -442,7 +442,7 @@ public final class WorldsFileStore {
                 return;
             }
 
-            final Path temp = this.file.resolveSibling(this.file.getFileName() + "/tmp");
+            final Path temp = this.file.resolveSibling(this.file.getFileName() + ".tmp");
             try {
                 Files.writeString(temp, snapshot, StandardCharsets.UTF_8);
                 try {
