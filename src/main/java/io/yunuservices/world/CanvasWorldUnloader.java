@@ -3,12 +3,18 @@ package io.yunuservices.world;
 import io.canvasmc.canvas.WorldUnloadResult;
 import java.util.function.Consumer;
 import org.bukkit.Bukkit;
+import org.bukkit.World;
 
 public final class CanvasWorldUnloader implements WorldUnloader {
 
     @Override
     public void unload(final String name, final boolean save, final Consumer<UnloadResult> callback) {
-        Bukkit.getServer().unloadWorldAsync(name, save, result -> callback.accept(this.map(result)));
+        final World world = Bukkit.getWorld(name);
+        if (world == null) {
+            callback.accept(UnloadResult.SUCCESS);
+            return;
+        }
+        Bukkit.getServer().unloadWorldAsync(world, save, result -> callback.accept(this.map(result)));
     }
 
     private UnloadResult map(final WorldUnloadResult result) {

@@ -233,7 +233,11 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
                 return;
             }
 
-            this.worldUnloader.unload(normalizedName, save, result -> future.complete(this.mapUnloadResult(normalizedName, result)));
+            try {
+                this.worldUnloader.unload(normalizedName, save, result -> future.complete(this.mapUnloadResult(normalizedName, result)));
+            } catch (final RuntimeException ex) {
+                future.complete(OperationOutcome.failure(this.normalizeThrowable(ex)));
+            }
         });
         return future;
     }
