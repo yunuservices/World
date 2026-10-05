@@ -26,6 +26,7 @@ import org.bukkit.plugin.Plugin;
 public final class WorldManagerServiceImpl implements WorldManagerService {
 
     private static final long WORLD_DIRECTORY_CACHE_TTL_MILLIS = 10_000L;
+    private static final Path PAPER_METADATA = Path.of("data", "paper", "metadata.dat");
 
     private final Plugin plugin;
     private final WorldStorage storage;
@@ -880,7 +881,7 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
                     }
 
                     final String fileName = sourcePath.getFileName().toString().toLowerCase(Locale.ROOT);
-                    if (fileName.equals("uid.dat") || fileName.equals("session.lock")) {
+                    if (fileName.equals("uid.dat") || fileName.equals("session.lock") || relative.equals(PAPER_METADATA)) {
                         return;
                     }
 
