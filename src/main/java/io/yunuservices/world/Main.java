@@ -43,8 +43,16 @@ public final class Main extends JavaPlugin {
             scheduler,
             worldUnloader
         );
-        Bukkit.getPluginManager().registerEvents(new WorldPortalListener(this, this.worldsFileStore, this.messagesStore, scheduler), this);
-        Bukkit.getPluginManager().registerEvents(new WorldGameModeListener(this.worldsFileStore), this);
+        final WorldPortalListener portalListener = new WorldPortalListener(this, this.worldsFileStore, this.messagesStore, scheduler);
+        final WorldGameModeListener gameModeListener = new WorldGameModeListener(this.worldsFileStore);
+        Bukkit.getPluginManager().registerEvents(portalListener, this);
+        Bukkit.getPluginManager().registerEvents(gameModeListener, this);
+        if (runtimeType == RuntimeType.CANVAS) {
+            Bukkit.getPluginManager().registerEvents(
+                new CanvasWorldListener(this, this.worldsFileStore, scheduler, portalListener, gameModeListener),
+                this
+            );
+        }
         new WorldCommands(this, service).register();
         service.loadTrackedWorldsOnStartup();
         this.getLogger().info("World has been enabled. " + runtimeType.displayName() + " world manager is ready.");

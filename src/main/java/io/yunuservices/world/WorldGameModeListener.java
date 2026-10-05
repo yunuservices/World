@@ -36,7 +36,7 @@ public final class WorldGameModeListener implements Listener {
         }
     }
 
-    private void applyGameMode(final Player player, final World world) {
+    void applyGameMode(final Player player, final World world) {
         final GameMode gameMode = this.worldsFileStore.gameMode(world.getName());
         if (gameMode == null) {
             return;

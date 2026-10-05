@@ -2,6 +2,7 @@ package io.yunuservices.world;
 
 import java.util.List;
 import java.util.Locale;
+import org.bukkit.PortalType;
 import org.bukkit.event.player.PlayerTeleportEvent;
 
 public enum PortalKind {
@@ -36,6 +37,14 @@ public enum PortalKind {
         return switch (raw.strip().toUpperCase(Locale.ROOT)) {
             case "NETHER", "NETHER_PORTAL" -> NETHER;
             case "END", "ENDER", "THE_END", "END_PORTAL" -> END;
+            default -> null;
+        };
+    }
+
+    public static PortalKind fromPortalType(final PortalType portalType) {
+        return switch (portalType) {
+            case NETHER -> NETHER;
+            case ENDER -> END;
             default -> null;
         };
     }

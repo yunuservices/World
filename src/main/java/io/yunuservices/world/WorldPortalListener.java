@@ -61,7 +61,7 @@ public final class WorldPortalListener implements Listener {
         event.setTo(destination);
     }
 
-    private void transfer(final Player player, final ServerTransferTarget transferTarget) {
+    void transfer(final Player player, final ServerTransferTarget transferTarget) {
         this.scheduler.executeEntity(this.plugin, player, () -> {
             try {
                 player.transfer(transferTarget.host(), transferTarget.port());
