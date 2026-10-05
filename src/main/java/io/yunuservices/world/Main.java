@@ -30,8 +30,13 @@ public final class Main extends JavaPlugin {
         this.configStore = new PluginConfigStore(this);
         this.worldsFileStore = new WorldsFileStore(this, scheduler);
 
+        final WorldStorage storage = new WorldStorage(
+            Bukkit.getWorldContainer().toPath(),
+            Bukkit.getWorlds().getFirst().getName()
+        );
         final WorldManagerServiceImpl service = new WorldManagerServiceImpl(
             this,
+            storage,
             this.configStore,
             this.worldsFileStore,
             this.messagesStore,

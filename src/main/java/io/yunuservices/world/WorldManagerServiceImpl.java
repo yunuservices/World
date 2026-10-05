@@ -28,7 +28,7 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
     private static final long WORLD_DIRECTORY_CACHE_TTL_MILLIS = 10_000L;
 
     private final Plugin plugin;
-    private final Path worldContainer;
+    private final WorldStorage storage;
     private final PluginConfigStore configStore;
     private final WorldsFileStore worldsFileStore;
     private final MessagesStore messagesStore;
@@ -38,6 +38,7 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
 
     public WorldManagerServiceImpl(
         final Plugin plugin,
+        final WorldStorage storage,
         final PluginConfigStore configStore,
         final WorldsFileStore worldsFileStore,
         final MessagesStore messagesStore,
@@ -45,7 +46,7 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
         final WorldUnloader worldUnloader
     ) {
         this.plugin = plugin;
-        this.worldContainer = Bukkit.getWorldContainer().toPath().toAbsolutePath().normalize();
+        this.storage = storage;
         this.configStore = configStore;
         this.worldsFileStore = worldsFileStore;
         this.messagesStore = messagesStore;
@@ -81,12 +82,7 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
     public CompletableFuture<OperationOutcome<List<WorldDescriptor>>> listWorlds() {
         return this.runAsyncIo(this::readDiskWorldState)
             .thenCompose(diskState -> this.runOnGlobalThread(() -> {
-                final Set<String> knownWorlds = new LinkedHashSet<>();
-                knownWorlds.addAll(diskState.names());
-                knownWorlds.addAll(this.worldsFileStore.trackedWorldNames());
-                for (final World loadedWorld : Bukkit.getWorlds()) {
-                    knownWorlds.add(loadedWorld.getName());
-                }
+                final Set<String> knownWorlds = this.knownWorldNames(diskState);
 
                 final List<WorldDescriptor> worlds = new ArrayList<>();
                 for (final String worldName : knownWorlds) {
@@ -94,7 +90,7 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
                     final Path directory = loadedWorld != null
                         ? loadedWorld.getWorldFolder().toPath().toAbsolutePath().normalize()
                         : this.safeResolveWorldPath(worldName);
-                    worlds.add(this.describe(worldName, directory, loadedWorld, loadedWorld != null || diskState.names().contains(worldName)));
+                    worlds.add(this.describe(worldName, directory, loadedWorld, loadedWorld != null || diskState.contains(worldName)));
                 }
 
                 worlds.sort(Comparator.comparing(WorldDescriptor::name, String.CASE_INSENSITIVE_ORDER));
@@ -602,15 +598,9 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
     public CompletableFuture<List<String>> suggestKnownWorlds() {
         return this.runAsyncIo(this::readDiskWorldState)
             .thenCompose(diskState -> this.runOnGlobalThread(() -> {
-                final Set<String> names = new LinkedHashSet<>();
-                names.addAll(diskState.names());
-                names.addAll(this.worldsFileStore.trackedWorldNames());
-                for (final World world : Bukkit.getWorlds()) {
-                    names.add(world.getName());
-                }
                 return OperationOutcome.success(
                     "Suggestions ready.",
-                    names.stream()
+                    this.knownWorldNames(diskState).stream()
                         .sorted(String.CASE_INSENSITIVE_ORDER)
                         .toList()
                 );
@@ -636,9 +626,7 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
 
     @Override
     public CompletableFuture<List<String>> suggestDiskWorlds() {
-        return this.runAsyncIo(() -> this.readDiskWorldState().directories().stream()
-            .map(path -> path.getFileName().toString())
-            .toList());
+        return this.runAsyncIo(() -> this.readDiskWorldState().names());
     }
 
     @Override
@@ -824,30 +812,33 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
         return this.configStore.settings().defaults().environment();
     }
 
-    private boolean looksLikeWorldFolder(final Path directory) {
-        return Files.exists(directory.resolve("level.dat"));
-    }
-
     private boolean isWorldFolder(final Path directory) {
-        return Files.isDirectory(directory) && this.looksLikeWorldFolder(directory);
+        return this.storage.isWorldFolder(directory);
     }
 
     private Path resolveWorldPath(final String worldName) {
-        final String normalizedName = this.normalizeWorldName(worldName)
-            .orElseThrow(() -> new IllegalArgumentException("Invalid managed world name: " + worldName));
-        final Path resolved = this.worldContainer.resolve(normalizedName).toAbsolutePath().normalize();
-        if (!resolved.startsWith(this.worldContainer)) {
-            throw new IllegalArgumentException("Refusing to use a path outside the world container: " + normalizedName);
-        }
-        return resolved;
+        return this.storage.resolve(worldName);
     }
 
     private Path safeResolveWorldPath(final String worldName) {
         try {
             return this.resolveWorldPath(worldName);
         } catch (final IllegalArgumentException ex) {
-            return this.worldContainer.resolve(String.valueOf(worldName)).toAbsolutePath().normalize();
+            return this.storage.container().resolve(String.valueOf(worldName)).toAbsolutePath().normalize();
         }
+    }
+
+    private Set<String> knownWorldNames(final DiskWorldState diskState) {
+        final Set<String> names = new LinkedHashSet<>(this.worldsFileStore.trackedWorldNames());
+        for (final World world : Bukkit.getWorlds()) {
+            names.add(world.getName());
+        }
+        for (final String diskName : diskState.names()) {
+            if (names.stream().noneMatch(diskName::equalsIgnoreCase)) {
+                names.add(diskName);
+            }
+        }
+        return names;
     }
 
     private Optional<String> normalizeWorldName(final String raw) {
@@ -867,10 +858,10 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
         final Path normalizedSource = source.toAbsolutePath().normalize();
         final Path normalizedTarget = target.toAbsolutePath().normalize();
 
-        if (!normalizedSource.startsWith(this.worldContainer)) {
+        if (!normalizedSource.startsWith(this.storage.container())) {
             throw new IOException("Refusing to copy from a path outside the world container: " + normalizedSource);
         }
-        if (!normalizedTarget.startsWith(this.worldContainer)) {
+        if (!normalizedTarget.startsWith(this.storage.container())) {
             throw new IOException("Refusing to copy to a path outside the world container: " + normalizedTarget);
         }
 
@@ -905,7 +896,7 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
 
     private void deleteDirectory(final Path target) throws IOException {
         final Path normalizedTarget = target.toAbsolutePath().normalize();
-        if (!normalizedTarget.startsWith(this.worldContainer)) {
+        if (!normalizedTarget.startsWith(this.storage.container())) {
             throw new IOException("Refusing to delete a path outside the world container: " + normalizedTarget);
         }
 
@@ -1098,22 +1089,9 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
         if (cachedSnapshot.isFresh(now)) {
             return cachedSnapshot.asState();
         }
-        if (!Files.isDirectory(this.worldContainer)) {
-            final DirectorySnapshot emptySnapshot = DirectorySnapshot.empty(now);
-            this.directorySnapshot = emptySnapshot;
-            return emptySnapshot.asState();
-        }
 
-        try (Stream<Path> stream = Files.list(this.worldContainer)) {
-            final List<Path> directories = stream
-                .filter(Files::isDirectory)
-                .filter(this::looksLikeWorldFolder)
-                .sorted(Comparator.comparing(path -> path.getFileName().toString(), String.CASE_INSENSITIVE_ORDER))
-                .toList();
-            final List<String> names = directories.stream()
-                .map(path -> path.getFileName().toString())
-                .toList();
-            final DirectorySnapshot refreshedSnapshot = new DirectorySnapshot(now, List.copyOf(directories), Set.copyOf(names));
+        try {
+            final DirectorySnapshot refreshedSnapshot = new DirectorySnapshot(now, this.storage.listWorldNames());
             this.directorySnapshot = refreshedSnapshot;
             return refreshedSnapshot.asState();
         } catch (final IOException ex) {
@@ -1125,7 +1103,11 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
         this.directorySnapshot = DirectorySnapshot.empty();
     }
 
-    private record DiskWorldState(List<Path> directories, Set<String> names) {
+    private record DiskWorldState(List<String> names) {
+
+        private boolean contains(final String worldName) {
+            return this.names.stream().anyMatch(worldName::equalsIgnoreCase);
+        }
     }
 
     private record CopyDiskState(boolean sourceExists, boolean targetExists) {
@@ -1134,14 +1116,14 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
     private record CopyPreparation(boolean sourceWasLoaded, World.Environment environment) {
     }
 
-    private record DirectorySnapshot(long loadedAtMillis, List<Path> directories, Set<String> names) {
+    private record DirectorySnapshot(long loadedAtMillis, List<String> names) {
 
         private static DirectorySnapshot empty() {
             return empty(0L);
         }
 
         private static DirectorySnapshot empty(final long loadedAtMillis) {
-            return new DirectorySnapshot(loadedAtMillis, List.of(), Set.of());
+            return new DirectorySnapshot(loadedAtMillis, List.of());
         }
 
         private boolean isFresh(final long now) {
@@ -1149,7 +1131,7 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
         }
 
         private DiskWorldState asState() {
-            return new DiskWorldState(this.directories, this.names);
+            return new DiskWorldState(this.names);
         }
     }
 }
