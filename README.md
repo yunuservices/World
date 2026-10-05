@@ -10,6 +10,7 @@
 - Async unload on Canvas, sync fallback on Paper
 - World spawn and portal routing
 - Cross-server transfer routing
+- Per-world difficulty and game mode
 - Async command suggestions
 
 ## Commands
@@ -27,14 +28,14 @@
 | `/world copy <source> <target> [load]` | Safely copy a world. Loaded source worlds are unloaded before copy and restored after copy. |
 | `/world tp <world> [player]` | Teleport yourself or another player to a world spawn. |
 | `/world spawn` | Send yourself to the configured spawn of your current world. |
-| `/world spawn <world>` | Send yourself to the configured spawn of another loaded world. |
-| `/world spawn <world> <player>` | Send another player to a world spawn. |
 | `/world setspawn` | Save your current location as the spawn of your current world. |
 | `/world setspawn <world>` | Save the Bukkit spawn location of a loaded world into `worlds.yml`. |
 | `/world setspawn <world> <x> <y> <z> [yaw] [pitch]` | Set an explicit stored spawn for a loaded world. |
+| `/world setdifficulty <world> <difficulty>` | Set the difficulty of a loaded world. |
+| `/world setgamemode <world> <gamemode>` | Set the game mode of a loaded world. Players get it on join, world change and respawn. |
 | `/world set portal <world> <NETHER\|END> <target-world\|off>` | Route a portal type to another loaded world or clear the rule. |
 | `/world set transfer <world> <NETHER\|END> <host[:port]\|off>` | Route a portal type to another server or clear the rule. |
-| `/world reload` | Reload `config.yml` and `worlds.yml` from disk. |
+| `/world reload` | Reload `config.yml`, `worlds.yml` and `lang/messages.toml` from disk. |
 
 ## Permissions
 
@@ -54,11 +55,14 @@
 | `world.command.tp` | `/world tp` |
 | `world.command.tp.other` | Target another player with `/world tp` |
 | `world.command.spawn` | `/world spawn` |
-| `world.command.spawn.other` | Target another player with `/world spawn` |
 | `world.command.set.*` | All `/world set ...` subcommands |
-| `world.command.set.portal` | `/world set portal` |
+| `world.command.set.portal` | `/world setdifficulty <world> <difficulty>` | Set the difficulty of a loaded world. |
+| `/world setgamemode <world> <gamemode>` | Set the game mode of a loaded world. Players get it on join, world change and respawn. |
+| `/world set portal` |
 | `world.command.set.transfer` | `/world set transfer` |
 | `world.command.setspawn` | `/world setspawn` |
+| `world.command.setdifficulty` | `/world setdifficulty` |
+| `world.command.setgamemode` | `/world setgamemode` |
 | `world.command.reload` | `/world reload` |
 
 All permissions default to `op` unless you override them with a permission manager such as LuckPerms.
@@ -87,16 +91,21 @@ commands:
 Initial `worlds.yml`:
 
 ```yaml
+tracked-worlds: {}
 worlds: {}
 ```
+
+Entries under `tracked-worlds` are keyed by the Base64 (URL-safe) form of the world name. The `worlds` section is the legacy format and is migrated on write.
 
 Example tracked world entry:
 
 ```yaml
-worlds:
-  arena:
+tracked-worlds:
+  YXJlbmE:
     name: arena
     environment: NORMAL
+    difficulty: HARD
+    game-mode: ADVENTURE
     spawn:
       x: 0.0
       y: 64.0
@@ -133,7 +142,9 @@ build/libs/World-1.0.0-SNAPSHOT.jar
 
 ## Notes
 
+- `delete` and `copy` only accept folders that contain a `level.dat`.
 - `copy` unloads a loaded source world before copying and reloads it afterward.
 - **Canvas** uses async `unloadWorldAsync`. **Paper** uses sync `Bukkit.unloadWorld`.
 - **Folia** is unsupported; the plugin disables itself there.
+- Messages can be edited in `lang/messages.toml`.
 - Licensed under AGPLv3.
