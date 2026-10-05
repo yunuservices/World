@@ -45,6 +45,13 @@ public final class Main extends JavaPlugin {
         this.getLogger().info("World has been enabled. " + runtimeType.displayName() + " world manager is ready.");
     }
 
+    @Override
+    public void onDisable() {
+        if (this.worldsFileStore != null) {
+            this.worldsFileStore.flush();
+        }
+    }
+
     public PluginConfigStore configStore() {
         return this.configStore;
     }

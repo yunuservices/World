@@ -2,9 +2,10 @@ package io.yunuservices.world;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashSet;
@@ -29,6 +30,7 @@ public final class WorldsFileStore {
     private final Scheduler scheduler;
     private final Path file;
     private final Object lock = new Object();
+    private final Object writeLock = new Object();
     private final AtomicBoolean flushScheduled = new AtomicBoolean();
     private YamlConfiguration configuration;
     private String pendingSnapshot;
@@ -516,25 +518,7 @@ public final class WorldsFileStore {
         }
         this.scheduler.executeAsync(this.plugin, () -> {
             try {
-                for (;;) {
-                    final String snapshot = this.takePendingSnapshot();
-                    if (snapshot == null) {
-                        break;
-                    }
-
-                    try {
-                        Files.writeString(
-                            this.file,
-                            snapshot,
-                            StandardCharsets.UTF_8,
-                            StandardOpenOption.CREATE,
-                            StandardOpenOption.TRUNCATE_EXISTING,
-                            StandardOpenOption.WRITE
-                        );
-                    } catch (final IOException ex) {
-                        this.plugin.getLogger().warning("Failed to persist worlds.yml: " + ex.getMessage());
-                    }
-                }
+                this.writePendingSnapshot();
             } finally {
                 this.flushScheduled.set(false);
                 if (this.hasPendingSnapshot()) {
@@ -542,6 +526,31 @@ public final class WorldsFileStore {
                 }
             }
         });
+    }
+
+    public void flush() {
+        this.writePendingSnapshot();
+    }
+
+    private void writePendingSnapshot() {
+        synchronized (this.writeLock) {
+            final String snapshot = this.takePendingSnapshot();
+            if (snapshot == null) {
+                return;
+            }
+
+            final Path temp = this.file.resolveSibling(this.file.getFileName() + ".tmp");
+            try {
+                Files.writeString(temp, snapshot, StandardCharsets.UTF_8);
+                try {
+                    Files.move(temp, this.file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                } catch (final AtomicMoveNotSupportedException ex) {
+                    Files.move(temp, this.file, StandardCopyOption.REPLACE_EXISTING);
+                }
+            } catch (final IOException ex) {
+                this.plugin.getLogger().warning("Failed to persist worlds.yml: " + ex.getMessage());
+            }
+        }
     }
 
     private String takePendingSnapshot() {
