@@ -472,7 +472,7 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
             }
 
             for (final Player player : world.getPlayers()) {
-                player.setGameMode(gameMode);
+                this.scheduler.executeEntity(this.plugin, player, () -> player.setGameMode(gameMode), null, 1L);
             }
             this.worldsFileStore.rememberGameMode(world.getName(), gameMode);
             return OperationOutcome.<Void>success(this.message("service.game_mode_updated",
@@ -728,7 +728,7 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
                 ? this.worldsFileStore.resolveSpawn(target)
                 : target.getSpawnLocation();
 
-            player.teleportAsync(location).whenComplete((success, throwable) -> {
+            this.scheduler.executeEntity(this.plugin, player, () -> player.teleportAsync(location).whenComplete((success, throwable) -> {
                 if (throwable != null) {
                     future.complete(OperationOutcome.failure(
                         this.message("service.teleport_failed", MessagePlaceholder.of("reason", throwable.getMessage()))
@@ -743,7 +743,7 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
                 } else {
                     future.complete(OperationOutcome.failure(this.message("service.teleport_rejected")));
                 }
-            });
+            }), () -> future.complete(OperationOutcome.failure(this.message("service.teleport_rejected"))), 1L);
         });
         return future;
     }
