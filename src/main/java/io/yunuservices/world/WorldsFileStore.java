@@ -373,7 +373,7 @@ public final class WorldsFileStore {
 
             return String.format(
                 Locale.US,
-                "x=%.2f, y=%.2f, z=%.2f, yaw=%.2f, pitch=%.2f",
+                "%.1f, %.1f, %.1f (yaw %.1f, pitch %.1f)",
                 this.configuration.getDouble(path + "/x"),
                 this.configuration.getDouble(path + "/y"),
                 this.configuration.getDouble(path + "/z"),

@@ -23,8 +23,7 @@ public final class MessagesStore {
 [general]
 prefix = "<gradient:#1DC9FF:#36D7E8:#58E3C1:#8BE08D:#FFD166:#FF9F43>[World]</gradient>"
 no_worlds = "<prefix> <yellow>No worlds were found.</yellow>"
-list_entry = "<prefix> <gray><name> | state=<state> | tracked=<tracked> | environment=<environment></gray>"
-info_line = "<prefix> <gray><label>=</gray><white><value></white>"
+list_line = "<prefix> <white><name></white> <gray><details></gray>"
 operation_failed = "<prefix> <red>Operation failed: <reason></red>"
 invalid_environment = "<prefix> <red>Invalid environment: <input>. Valid values: NORMAL, NETHER, THE_END</red>"
 invalid_portal = "<prefix> <red>Invalid portal type: <input>. Valid values: NETHER, END</red>"
@@ -42,24 +41,22 @@ internal_error = "<prefix> <red>An error occurred during the operation: <reason>
 [values.state]
 loaded = "loaded"
 disk = "disk"
+missing = "missing"
 
 [values.info]
-name = "name"
-loaded = "loaded"
-exists_on_disk = "existsOnDisk"
 tracked = "tracked"
-path = "path"
-environment = "environment"
-difficulty = "difficulty"
-game_mode = "gameMode"
+untracked = "untracked"
 players = "players"
 hardcore = "hardcore"
-generate_structures = "generateStructures"
-configured_spawn = "configuredSpawn"
-nether_portal = "netherPortal"
-nether_transfer = "netherTransfer"
-end_portal = "endPortal"
-end_transfer = "endTransfer"
+no_structures = "no structures"
+not_set = "not set"
+
+[info]
+header = "<prefix> <white><name></white> <gray><details></gray>"
+settings = "<prefix> <gray>Difficulty</gray> <white><difficulty></white> <gray>· Game mode</gray> <white><game_mode></white>"
+spawn = "<prefix> <gray>Spawn</gray> <white><spawn></white>"
+portal = "<prefix> <gray><portal> portal →</gray> <white><target></white>"
+transfer = "<prefix> <gray><portal> portal →</gray> <white><target></white> <gray>(transfer)</gray>"
 
 [service]
 world_not_found = "<prefix> <red>World '<world>' was not found.</red>"

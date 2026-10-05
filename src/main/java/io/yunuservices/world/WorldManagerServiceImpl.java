@@ -91,10 +91,7 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
                 final List<WorldDescriptor> worlds = new ArrayList<>();
                 for (final String worldName : knownWorlds) {
                     final World loadedWorld = Bukkit.getWorld(worldName);
-                    final Path directory = loadedWorld != null
-                        ? loadedWorld.getWorldFolder().toPath().toAbsolutePath().normalize()
-                        : this.safeResolveWorldPath(worldName);
-                    worlds.add(this.describe(worldName, directory, loadedWorld, loadedWorld != null || diskState.contains(worldName)));
+                    worlds.add(this.describe(worldName, loadedWorld, loadedWorld != null || diskState.contains(worldName)));
                 }
 
                 worlds.sort(Comparator.comparing(WorldDescriptor::name, String.CASE_INSENSITIVE_ORDER));
@@ -124,12 +121,9 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
                     return OperationOutcome.failure(this.message("service.world_not_found", MessagePlaceholder.of("world", normalizedName)));
                 }
 
-                final Path resolvedDirectory = loadedWorld != null
-                    ? loadedWorld.getWorldFolder().toPath().toAbsolutePath().normalize()
-                    : directory;
                 return OperationOutcome.success(
                     "World information is ready.",
-                    this.describe(normalizedName, resolvedDirectory, loadedWorld, existsOnDisk)
+                    this.describe(normalizedName, loadedWorld, existsOnDisk)
                 );
             }));
     }
@@ -778,14 +772,13 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
         };
     }
 
-    private WorldDescriptor describe(final String name, final Path directory, final World world, final boolean existsOnDisk) {
+    private WorldDescriptor describe(final String name, final World world, final boolean existsOnDisk) {
         if (world == null) {
             return new WorldDescriptor(
                 name,
                 false,
                 existsOnDisk,
                 this.worldsFileStore.isTracked(name),
-                directory,
                 this.worldsFileStore.environment(name),
                 this.worldsFileStore.difficultySummary(name),
                 this.worldsFileStore.gameModeSummary(name),
@@ -801,9 +794,8 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
             true,
             existsOnDisk,
             this.worldsFileStore.isTracked(world.getName()),
-            directory,
             world.getEnvironment(),
-            this.worldsFileStore.difficultySummary(world.getName()),
+            world.getDifficulty().name(),
             this.worldsFileStore.gameModeSummary(world.getName()),
             world.getPlayers().size(),
             world.isHardcore(),
@@ -838,14 +830,6 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
 
     private Path resolveWorldPath(final String worldName) {
         return this.storage.resolve(worldName);
-    }
-
-    private Path safeResolveWorldPath(final String worldName) {
-        try {
-            return this.resolveWorldPath(worldName);
-        } catch (final IllegalArgumentException ex) {
-            return this.storage.container().resolve(String.valueOf(worldName)).toAbsolutePath().normalize();
-        }
     }
 
     private Set<String> knownWorldNames(final DiskWorldState diskState) {

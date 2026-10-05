@@ -1,7 +1,7 @@
 package io.yunuservices.world;
 
 import io.papermc.paper.command.brigadier.CommandSourceStack;
-import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
@@ -148,13 +148,9 @@ public final class WorldCommands {
 
             return worlds.stream()
                     .map(descriptor -> this.messagesStore.message(
-                            "general.list_entry",
+                            "general.list_line",
                             this.placeholder("name", descriptor.name()),
-                            this.placeholder("state",
-                                    descriptor.loaded() ? this.messagesStore.value("values.state.loaded")
-                                            : this.messagesStore.value("values.state.disk")),
-                            this.placeholder("tracked", descriptor.tracked()),
-                            this.placeholder("environment", this.nullSafe(descriptor.environment()))))
+                            this.placeholder("details", this.details(descriptor))))
                     .toList();
         });
     }
@@ -166,28 +162,7 @@ public final class WorldCommands {
                 return List.of(outcome.message());
             }
 
-            final WorldDescriptor descriptor = outcome.value();
-            return List.of(
-                    this.infoLine("values.info.name", descriptor.name()),
-                    this.infoLine("values.info.loaded", descriptor.loaded()),
-                    this.infoLine("values.info.exists_on_disk", descriptor.existsOnDisk()),
-                    this.infoLine("values.info.tracked", descriptor.tracked()),
-                    this.infoLine("values.info.path", this.normalizePath(descriptor.path())),
-                    this.infoLine("values.info.environment", this.nullSafe(descriptor.environment())),
-                    this.infoLine("values.info.difficulty", this.nullSafe(descriptor.difficulty())),
-                    this.infoLine("values.info.game_mode", this.nullSafe(descriptor.gameMode())),
-                    this.infoLine("values.info.players", this.nullSafe(descriptor.playerCount())),
-                    this.infoLine("values.info.hardcore", this.nullSafe(descriptor.hardcore())),
-                    this.infoLine("values.info.generate_structures", this.nullSafe(descriptor.generatesStructures())),
-                    this.infoLine("values.info.configured_spawn", this.nullSafe(descriptor.configuredSpawn())),
-                    this.infoLine("values.info.nether_portal",
-                            this.plugin.worldsFileStore().portalWorldSummary(name, PortalKind.NETHER)),
-                    this.infoLine("values.info.nether_transfer",
-                            this.plugin.worldsFileStore().portalTransferSummary(name, PortalKind.NETHER)),
-                    this.infoLine("values.info.end_portal",
-                            this.plugin.worldsFileStore().portalWorldSummary(name, PortalKind.END)),
-                    this.infoLine("values.info.end_transfer",
-                            this.plugin.worldsFileStore().portalTransferSummary(name, PortalKind.END)));
+            return this.infoLines(outcome.value());
         });
     }
 
@@ -504,14 +479,6 @@ public final class WorldCommands {
         return null;
     }
 
-    private String normalizePath(final Path path) {
-        return path.toAbsolutePath().normalize().toString();
-    }
-
-    private String nullSafe(final Object value) {
-        return value == null ? "-" : String.valueOf(value);
-    }
-
     private Iterable<Suggestion> toSuggestions(final List<String> values) {
         return values.stream()
                 .map(Suggestion::suggestion)
@@ -535,11 +502,63 @@ public final class WorldCommands {
         sender.sendMessage(this.messagesStore.deserialize(message));
     }
 
-    private String infoLine(final String labelKey, final Object value) {
-        return this.messagesStore.message(
-                "general.info_line",
-                this.placeholder("label", this.messagesStore.value(labelKey)),
-                this.placeholder("value", value));
+    private String details(final WorldDescriptor descriptor) {
+        final List<String> details = new ArrayList<>();
+        details.add(this.messagesStore.value(descriptor.loaded() ? "values.state.loaded"
+                : descriptor.existsOnDisk() ? "values.state.disk" : "values.state.missing"));
+        details.add(this.messagesStore.value(descriptor.tracked() ? "values.info.tracked" : "values.info.untracked"));
+        if (descriptor.environment() != null) {
+            details.add(descriptor.environment().name());
+        }
+        if (descriptor.playerCount() != null) {
+            details.add(descriptor.playerCount() + " " + this.messagesStore.value("values.info.players"));
+        }
+        if (Boolean.TRUE.equals(descriptor.hardcore())) {
+            details.add(this.messagesStore.value("values.info.hardcore"));
+        }
+        if (Boolean.FALSE.equals(descriptor.generatesStructures())) {
+            details.add(this.messagesStore.value("values.info.no_structures"));
+        }
+
+        return "· " + String.join(" · ", details);
+    }
+
+    private List<String> infoLines(final WorldDescriptor descriptor) {
+        final String name = descriptor.name();
+        final String notSet = this.messagesStore.value("values.info.not_set");
+        final List<String> lines = new ArrayList<>();
+        lines.add(this.messagesStore.message("info.header",
+                this.placeholder("name", name),
+                this.placeholder("details", this.details(descriptor))));
+        final String difficulty = this.orDefault(descriptor.difficulty(), notSet);
+        final String gameMode = this.orDefault(descriptor.gameMode(), notSet);
+        if (!difficulty.equals(notSet) || !gameMode.equals(notSet)) {
+            lines.add(this.messagesStore.message("info.settings",
+                    this.placeholder("difficulty", difficulty),
+                    this.placeholder("game_mode", gameMode)));
+        }
+        if (!"-".equals(descriptor.configuredSpawn())) {
+            lines.add(this.messagesStore.message("info.spawn", this.placeholder("spawn", descriptor.configuredSpawn())));
+        }
+        for (final PortalKind portalKind : PortalKind.values()) {
+            final String world = this.plugin.worldsFileStore().portalWorldSummary(name, portalKind);
+            if (!"-".equals(world)) {
+                lines.add(this.messagesStore.message("info.portal",
+                        this.placeholder("portal", portalKind.displayName()),
+                        this.placeholder("target", world)));
+            }
+            final String transfer = this.plugin.worldsFileStore().portalTransferSummary(name, portalKind);
+            if (!"-".equals(transfer)) {
+                lines.add(this.messagesStore.message("info.transfer",
+                        this.placeholder("portal", portalKind.displayName()),
+                        this.placeholder("target", transfer)));
+            }
+        }
+        return lines;
+    }
+
+    private String orDefault(final String value, final String fallback) {
+        return value == null || "-".equals(value) ? fallback : value;
     }
 
     private MessagePlaceholder placeholder(final String name, final Object value) {
