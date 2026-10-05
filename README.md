@@ -92,16 +92,15 @@ Initial `worlds.yml`:
 
 ```yaml
 tracked-worlds: {}
-worlds: {}
 ```
 
-Entries under `tracked-worlds` are keyed by the Base64 (URL-safe) form of the world name. The `worlds` section is the legacy format and is migrated on write.
+Older `worlds.yml` formats are migrated automatically on load.
 
 Example tracked world entry:
 
 ```yaml
 tracked-worlds:
-  YXJlbmE:
+  arena:
     name: arena
     environment: NORMAL
     difficulty: HARD
