@@ -780,7 +780,6 @@ public final class WorldManagerServiceImpl implements WorldManagerService {
             );
         }
 
-        this.worldsFileStore.rememberEnvironment(world.getName(), world.getEnvironment());
         return new WorldDescriptor(
             world.getName(),
             true,
