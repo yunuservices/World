@@ -117,7 +117,7 @@ public final class WorldCommands {
         this.commandManager.command(this.setBase("transfer", "world.command.set.transfer")
                 .required("world", StringParser.stringParser(), this.loadedWorldSuggestions())
                 .required("portal", StringParser.stringParser(), this.portalSuggestions())
-                .required("target", StringParser.stringParser(), this.clearOnlySuggestions())
+                .required("target", StringParser.greedyStringParser(), this.clearOnlySuggestions())
                 .handler(this::handleSetTransfer));
         this.commandManager.command(this.base("reload", "world.command.reload").handler(this::handleReload));
     }
