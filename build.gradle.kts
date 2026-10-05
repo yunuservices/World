@@ -24,7 +24,7 @@ repositories {
 dependencies {
     compileOnly("io.canvasmc.canvas:canvas-api:26.1.2.build.836-stable")
     compileOnly("net.kyori:adventure-text-minimessage:5.2.0")
-    implementation("org.incendo:cloud-paper:2.0.0-beta.17")
+    implementation("org.incendo:cloud-paper:2.0.1")
     implementation("org.tomlj:tomlj:1.1.1")
 }
 
