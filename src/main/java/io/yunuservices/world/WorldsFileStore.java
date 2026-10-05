@@ -7,8 +7,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
-import java.util.Base64;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -25,6 +23,7 @@ public final class WorldsFileStore {
 
     private static final String STORAGE_ROOT = "tracked-worlds";
     private static final String LEGACY_ROOT = "worlds";
+    private static final char SEPARATOR = '/';
 
     private final Plugin plugin;
     private final Scheduler scheduler;
@@ -53,14 +52,17 @@ public final class WorldsFileStore {
             this.configuration = Files.exists(this.file)
                 ? YamlConfiguration.loadConfiguration(this.file.toFile())
                 : new YamlConfiguration();
+            this.configuration.options().pathSeparator(SEPARATOR);
 
             boolean changed = false;
             if (!this.configuration.isConfigurationSection(STORAGE_ROOT)) {
                 this.configuration.createSection(STORAGE_ROOT);
                 changed = true;
             }
-            if (!this.configuration.isConfigurationSection(LEGACY_ROOT)) {
-                this.configuration.createSection(LEGACY_ROOT);
+            changed |= this.migrateEntries(STORAGE_ROOT);
+            changed |= this.migrateEntries(LEGACY_ROOT);
+            if (this.configuration.contains(LEGACY_ROOT)) {
+                this.configuration.set(LEGACY_ROOT, null);
                 changed = true;
             }
             if (changed) {
@@ -71,57 +73,23 @@ public final class WorldsFileStore {
 
     public boolean isTracked(final String worldName) {
         synchronized (this.lock) {
-            return this.configuration.isConfigurationSection(this.readPath(worldName));
+            return this.configuration.isConfigurationSection(this.worldPath(worldName));
         }
     }
 
     public List<String> trackedWorldNames() {
         synchronized (this.lock) {
-            final LinkedHashSet<String> names = new LinkedHashSet<>();
-            boolean migrated = false;
+            final ConfigurationSection section = this.configuration.getConfigurationSection(STORAGE_ROOT);
+            if (section == null) {
+                return List.of();
+            }
 
-            final ConfigurationSection currentSection = this.configuration.getConfigurationSection(STORAGE_ROOT);
-            if (currentSection != null) {
-                for (final String key : new ArrayList<>(currentSection.getKeys(false))) {
-                    final String path = STORAGE_ROOT + "." + key;
-                    if (!this.configuration.isConfigurationSection(path)) {
-                        continue;
-                    }
-                    final String storedName = this.configuration.getString(path + ".name");
-                    final String normalizedName = WorldNameRules.normalize(storedName).orElse(null);
-                    if (normalizedName == null) {
-                        this.plugin.getLogger().warning("Skipping invalid tracked world entry at '" + path + "'.");
-                        continue;
-                    }
-                    names.add(normalizedName);
+            final List<String> result = new ArrayList<>();
+            for (final String key : section.getKeys(false)) {
+                if (section.isConfigurationSection(key) && WorldNameRules.normalize(key).isPresent()) {
+                    result.add(key);
                 }
             }
-
-            final ConfigurationSection legacySection = this.configuration.getConfigurationSection(LEGACY_ROOT);
-            if (legacySection != null) {
-                for (final String key : new ArrayList<>(legacySection.getKeys(false))) {
-                    final String legacyPath = LEGACY_ROOT + "." + key;
-                    if (!this.configuration.isConfigurationSection(legacyPath)) {
-                        continue;
-                    }
-
-                    final String storedName = this.configuration.getString(legacyPath + ".name", key);
-                    final String normalizedName = WorldNameRules.normalize(storedName).orElse(null);
-                    if (normalizedName == null) {
-                        this.plugin.getLogger().warning("Skipping invalid legacy tracked world entry at '" + legacyPath + "'.");
-                        continue;
-                    }
-
-                    names.add(normalizedName);
-                    migrated |= this.migrateLegacyEntry(normalizedName);
-                }
-            }
-
-            if (migrated) {
-                this.persistAsync();
-            }
-
-            final List<String> result = new ArrayList<>(names);
             result.sort(String.CASE_INSENSITIVE_ORDER);
             return result;
         }
@@ -129,7 +97,7 @@ public final class WorldsFileStore {
 
     public World.Environment environment(final String worldName) {
         synchronized (this.lock) {
-            final String environmentName = this.configuration.getString(this.readPath(worldName) + ".environment");
+            final String environmentName = this.configuration.getString(this.worldPath(worldName) + "/environment");
             if (environmentName == null || environmentName.isBlank()) {
                 return null;
             }
@@ -146,15 +114,15 @@ public final class WorldsFileStore {
     public void rememberEnvironment(final String worldName, final World.Environment environment) {
         synchronized (this.lock) {
             final String normalizedName = this.requireWorldName(worldName);
-            final String path = this.writePath(normalizedName);
+            final String path = this.worldPath(normalizedName);
             final String value = environment.name();
-            if (value.equals(this.configuration.getString(path + ".environment"))
-                && normalizedName.equals(this.configuration.getString(path + ".name"))) {
+            if (value.equals(this.configuration.getString(path + "/environment"))
+                && normalizedName.equals(this.configuration.getString(path + "/name"))) {
                 return;
             }
 
-            this.configuration.set(path + ".name", normalizedName);
-            this.configuration.set(path + ".environment", value);
+            this.configuration.set(path + "/name", normalizedName);
+            this.configuration.set(path + "/environment", value);
             this.persistAsync();
         }
     }
@@ -162,23 +130,23 @@ public final class WorldsFileStore {
     public void rememberSpawn(final String worldName, final Location location) {
         synchronized (this.lock) {
             final String normalizedName = this.requireWorldName(worldName);
-            final String path = this.writePath(normalizedName);
+            final String path = this.worldPath(normalizedName);
             if (this.hasSameSpawn(path, normalizedName, location)) {
                 return;
             }
-            this.configuration.set(path + ".name", normalizedName);
-            this.configuration.set(path + ".spawn.x", location.getX());
-            this.configuration.set(path + ".spawn.y", location.getY());
-            this.configuration.set(path + ".spawn.z", location.getZ());
-            this.configuration.set(path + ".spawn.yaw", location.getYaw());
-            this.configuration.set(path + ".spawn.pitch", location.getPitch());
+            this.configuration.set(path + "/name", normalizedName);
+            this.configuration.set(path + "/spawn/x", location.getX());
+            this.configuration.set(path + "/spawn/y", location.getY());
+            this.configuration.set(path + "/spawn/z", location.getZ());
+            this.configuration.set(path + "/spawn/yaw", location.getYaw());
+            this.configuration.set(path + "/spawn/pitch", location.getPitch());
             this.persistAsync();
         }
     }
 
     public Difficulty difficulty(final String worldName) {
         synchronized (this.lock) {
-            final String difficultyName = this.configuration.getString(this.readPath(worldName) + ".difficulty");
+            final String difficultyName = this.configuration.getString(this.worldPath(worldName) + "/difficulty");
             if (difficultyName == null || difficultyName.isBlank()) {
                 return null;
             }
@@ -195,22 +163,22 @@ public final class WorldsFileStore {
     public void rememberDifficulty(final String worldName, final Difficulty difficulty) {
         synchronized (this.lock) {
             final String normalizedName = this.requireWorldName(worldName);
-            final String path = this.writePath(normalizedName);
+            final String path = this.worldPath(normalizedName);
             final String value = difficulty.name();
-            if (value.equals(this.configuration.getString(path + ".difficulty"))
-                && normalizedName.equals(this.configuration.getString(path + ".name"))) {
+            if (value.equals(this.configuration.getString(path + "/difficulty"))
+                && normalizedName.equals(this.configuration.getString(path + "/name"))) {
                 return;
             }
 
-            this.configuration.set(path + ".name", normalizedName);
-            this.configuration.set(path + ".difficulty", value);
+            this.configuration.set(path + "/name", normalizedName);
+            this.configuration.set(path + "/difficulty", value);
             this.persistAsync();
         }
     }
 
     public GameMode gameMode(final String worldName) {
         synchronized (this.lock) {
-            final String gameModeName = this.configuration.getString(this.readPath(worldName) + ".game-mode");
+            final String gameModeName = this.configuration.getString(this.worldPath(worldName) + "/game-mode");
             if (gameModeName == null || gameModeName.isBlank()) {
                 return null;
             }
@@ -227,15 +195,15 @@ public final class WorldsFileStore {
     public void rememberGameMode(final String worldName, final GameMode gameMode) {
         synchronized (this.lock) {
             final String normalizedName = this.requireWorldName(worldName);
-            final String path = this.writePath(normalizedName);
+            final String path = this.worldPath(normalizedName);
             final String value = gameMode.name();
-            if (value.equals(this.configuration.getString(path + ".game-mode"))
-                && normalizedName.equals(this.configuration.getString(path + ".name"))) {
+            if (value.equals(this.configuration.getString(path + "/game-mode"))
+                && normalizedName.equals(this.configuration.getString(path + "/name"))) {
                 return;
             }
 
-            this.configuration.set(path + ".name", normalizedName);
-            this.configuration.set(path + ".game-mode", value);
+            this.configuration.set(path + "/name", normalizedName);
+            this.configuration.set(path + "/game-mode", value);
             this.persistAsync();
         }
     }
@@ -253,17 +221,17 @@ public final class WorldsFileStore {
     public void trackWorld(final String worldName, final World.Environment environment, final Location spawn) {
         synchronized (this.lock) {
             final String normalizedName = this.requireWorldName(worldName);
-            final String path = this.writePath(normalizedName);
-            this.configuration.set(path + ".name", normalizedName);
+            final String path = this.worldPath(normalizedName);
+            this.configuration.set(path + "/name", normalizedName);
             if (environment != null) {
-                this.configuration.set(path + ".environment", environment.name());
+                this.configuration.set(path + "/environment", environment.name());
             }
             if (spawn != null) {
-                this.configuration.set(path + ".spawn.x", spawn.getX());
-                this.configuration.set(path + ".spawn.y", spawn.getY());
-                this.configuration.set(path + ".spawn.z", spawn.getZ());
-                this.configuration.set(path + ".spawn.yaw", spawn.getYaw());
-                this.configuration.set(path + ".spawn.pitch", spawn.getPitch());
+                this.configuration.set(path + "/spawn/x", spawn.getX());
+                this.configuration.set(path + "/spawn/y", spawn.getY());
+                this.configuration.set(path + "/spawn/z", spawn.getZ());
+                this.configuration.set(path + "/spawn/yaw", spawn.getYaw());
+                this.configuration.set(path + "/spawn/pitch", spawn.getPitch());
             }
             this.persistAsync();
         }
@@ -273,27 +241,27 @@ public final class WorldsFileStore {
         synchronized (this.lock) {
             final String normalizedSourceName = this.requireWorldName(sourceWorldName);
             final String normalizedTargetName = this.requireWorldName(targetWorldName);
-            final String sourcePath = this.readPath(normalizedSourceName);
-            final String targetPath = this.writePath(normalizedTargetName);
+            final String sourcePath = this.worldPath(normalizedSourceName);
+            final String targetPath = this.worldPath(normalizedTargetName);
 
-            this.configuration.set(targetPath + ".name", normalizedTargetName);
+            this.configuration.set(targetPath + "/name", normalizedTargetName);
 
-            final String environment = this.configuration.getString(sourcePath + ".environment");
+            final String environment = this.configuration.getString(sourcePath + "/environment");
             if (environment != null && !environment.isBlank()) {
-                this.configuration.set(targetPath + ".environment", environment);
+                this.configuration.set(targetPath + "/environment", environment);
             } else if (fallbackEnvironment != null) {
-                this.configuration.set(targetPath + ".environment", fallbackEnvironment.name());
+                this.configuration.set(targetPath + "/environment", fallbackEnvironment.name());
             }
 
-            if (this.configuration.isConfigurationSection(sourcePath + ".spawn")) {
-                this.configuration.set(targetPath + ".spawn.x", this.configuration.getDouble(sourcePath + ".spawn.x"));
-                this.configuration.set(targetPath + ".spawn.y", this.configuration.getDouble(sourcePath + ".spawn.y"));
-                this.configuration.set(targetPath + ".spawn.z", this.configuration.getDouble(sourcePath + ".spawn.z"));
-                this.configuration.set(targetPath + ".spawn.yaw", (float) this.configuration.getDouble(sourcePath + ".spawn.yaw"));
-                this.configuration.set(targetPath + ".spawn.pitch", (float) this.configuration.getDouble(sourcePath + ".spawn.pitch"));
+            if (this.configuration.isConfigurationSection(sourcePath + "/spawn")) {
+                this.configuration.set(targetPath + "/spawn/x", this.configuration.getDouble(sourcePath + "/spawn/x"));
+                this.configuration.set(targetPath + "/spawn/y", this.configuration.getDouble(sourcePath + "/spawn/y"));
+                this.configuration.set(targetPath + "/spawn/z", this.configuration.getDouble(sourcePath + "/spawn/z"));
+                this.configuration.set(targetPath + "/spawn/yaw", (float) this.configuration.getDouble(sourcePath + "/spawn/yaw"));
+                this.configuration.set(targetPath + "/spawn/pitch", (float) this.configuration.getDouble(sourcePath + "/spawn/pitch"));
             }
 
-            this.copySection(sourcePath + ".portals", targetPath + ".portals");
+            this.copySection(sourcePath + "/portals", targetPath + "/portals");
 
             this.persistAsync();
         }
@@ -301,13 +269,13 @@ public final class WorldsFileStore {
 
     public String portalWorld(final String worldName, final PortalKind portalKind) {
         synchronized (this.lock) {
-            return this.configuration.getString(this.portalPath(worldName, portalKind, false) + ".world");
+            return this.configuration.getString(this.portalPath(worldName, portalKind) + "/world");
         }
     }
 
     public ServerTransferTarget portalTransfer(final String worldName, final PortalKind portalKind) {
         synchronized (this.lock) {
-            final String value = this.configuration.getString(this.portalPath(worldName, portalKind, false) + ".transfer");
+            final String value = this.configuration.getString(this.portalPath(worldName, portalKind) + "/transfer");
             if (value == null || value.isBlank()) {
                 return null;
             }
@@ -336,21 +304,21 @@ public final class WorldsFileStore {
     public void rememberPortalWorld(final String worldName, final PortalKind portalKind, final String targetWorldName) {
         synchronized (this.lock) {
             final String normalizedName = this.requireWorldName(worldName);
-            final String path = this.portalPath(normalizedName, portalKind, true);
-            if (targetWorldName.equals(this.configuration.getString(path + ".world"))
-                && normalizedName.equals(this.configuration.getString(this.writePath(normalizedName) + ".name"))) {
+            final String path = this.portalPath(normalizedName, portalKind);
+            if (targetWorldName.equals(this.configuration.getString(path + "/world"))
+                && normalizedName.equals(this.configuration.getString(this.worldPath(normalizedName) + "/name"))) {
                 return;
             }
 
-            this.configuration.set(this.writePath(normalizedName) + ".name", normalizedName);
-            this.configuration.set(path + ".world", targetWorldName);
+            this.configuration.set(this.worldPath(normalizedName) + "/name", normalizedName);
+            this.configuration.set(path + "/world", targetWorldName);
             this.persistAsync();
         }
     }
 
     public void clearPortalWorld(final String worldName, final PortalKind portalKind) {
         synchronized (this.lock) {
-            final String path = this.portalPath(worldName, portalKind, false) + ".world";
+            final String path = this.portalPath(worldName, portalKind) + "/world";
             if (!this.configuration.contains(path)) {
                 return;
             }
@@ -363,22 +331,22 @@ public final class WorldsFileStore {
     public void rememberPortalTransfer(final String worldName, final PortalKind portalKind, final ServerTransferTarget transferTarget) {
         synchronized (this.lock) {
             final String normalizedName = this.requireWorldName(worldName);
-            final String path = this.portalPath(normalizedName, portalKind, true);
+            final String path = this.portalPath(normalizedName, portalKind);
             final String value = transferTarget.asConfigValue();
-            if (value.equals(this.configuration.getString(path + ".transfer"))
-                && normalizedName.equals(this.configuration.getString(this.writePath(normalizedName) + ".name"))) {
+            if (value.equals(this.configuration.getString(path + "/transfer"))
+                && normalizedName.equals(this.configuration.getString(this.worldPath(normalizedName) + "/name"))) {
                 return;
             }
 
-            this.configuration.set(this.writePath(normalizedName) + ".name", normalizedName);
-            this.configuration.set(path + ".transfer", value);
+            this.configuration.set(this.worldPath(normalizedName) + "/name", normalizedName);
+            this.configuration.set(path + "/transfer", value);
             this.persistAsync();
         }
     }
 
     public void clearPortalTransfer(final String worldName, final PortalKind portalKind) {
         synchronized (this.lock) {
-            final String path = this.portalPath(worldName, portalKind, false) + ".transfer";
+            final String path = this.portalPath(worldName, portalKind) + "/transfer";
             if (!this.configuration.contains(path)) {
                 return;
             }
@@ -390,7 +358,7 @@ public final class WorldsFileStore {
 
     public Location resolveSpawn(final World world) {
         synchronized (this.lock) {
-            final String path = this.readPath(world.getName()) + ".spawn";
+            final String path = this.worldPath(world.getName()) + "/spawn";
             final Location fallback = world.getSpawnLocation();
             if (!this.configuration.isConfigurationSection(path)) {
                 return fallback;
@@ -398,18 +366,18 @@ public final class WorldsFileStore {
 
             return new Location(
                 world,
-                this.configuration.getDouble(path + ".x", fallback.getX()),
-                this.configuration.getDouble(path + ".y", fallback.getY()),
-                this.configuration.getDouble(path + ".z", fallback.getZ()),
-                (float) this.configuration.getDouble(path + ".yaw", fallback.getYaw()),
-                (float) this.configuration.getDouble(path + ".pitch", fallback.getPitch())
+                this.configuration.getDouble(path + "/x", fallback.getX()),
+                this.configuration.getDouble(path + "/y", fallback.getY()),
+                this.configuration.getDouble(path + "/z", fallback.getZ()),
+                (float) this.configuration.getDouble(path + "/yaw", fallback.getYaw()),
+                (float) this.configuration.getDouble(path + "/pitch", fallback.getPitch())
             );
         }
     }
 
     public String spawnSummary(final String worldName) {
         synchronized (this.lock) {
-            final String path = this.readPath(worldName) + ".spawn";
+            final String path = this.worldPath(worldName) + "/spawn";
             if (!this.configuration.isConfigurationSection(path)) {
                 return "-";
             }
@@ -417,87 +385,66 @@ public final class WorldsFileStore {
             return String.format(
                 Locale.US,
                 "x=%.2f, y=%.2f, z=%.2f, yaw=%.2f, pitch=%.2f",
-                this.configuration.getDouble(path + ".x"),
-                this.configuration.getDouble(path + ".y"),
-                this.configuration.getDouble(path + ".z"),
-                this.configuration.getDouble(path + ".yaw"),
-                this.configuration.getDouble(path + ".pitch")
+                this.configuration.getDouble(path + "/x"),
+                this.configuration.getDouble(path + "/y"),
+                this.configuration.getDouble(path + "/z"),
+                this.configuration.getDouble(path + "/yaw"),
+                this.configuration.getDouble(path + "/pitch")
             );
         }
     }
 
     public void removeWorld(final String worldName) {
         synchronized (this.lock) {
-            final String normalizedName = this.requireWorldName(worldName);
-            final String currentPath = this.encodedPath(normalizedName);
-            final String legacyPath = this.legacyPath(normalizedName);
-            if (!this.configuration.contains(currentPath) && !this.configuration.contains(legacyPath)) {
+            final String path = this.worldPath(worldName);
+            if (!this.configuration.contains(path)) {
                 return;
             }
 
-            this.configuration.set(currentPath, null);
-            this.configuration.set(legacyPath, null);
+            this.configuration.set(path, null);
             this.persistAsync();
         }
     }
 
-    private String storageKey(final String worldName) {
-        final String normalizedName = this.requireWorldName(worldName);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(normalizedName.getBytes(StandardCharsets.UTF_8));
+    private String worldPath(final String worldName) {
+        return STORAGE_ROOT + SEPARATOR + this.requireWorldName(worldName);
     }
 
-    private String encodedPath(final String worldName) {
-        return STORAGE_ROOT + "." + this.storageKey(worldName);
+    private String portalPath(final String worldName, final PortalKind portalKind) {
+        return this.worldPath(worldName) + "/portals/" + portalKind.configKey();
     }
 
-    private String legacyPath(final String worldName) {
-        final String normalizedName = this.requireWorldName(worldName);
-        return LEGACY_ROOT + "." + normalizedName.toLowerCase(Locale.ROOT);
-    }
-
-    private String readPath(final String worldName) {
-        final String currentPath = this.encodedPath(worldName);
-        if (this.configuration.isConfigurationSection(currentPath)) {
-            return currentPath;
-        }
-
-        final String legacyPath = this.legacyPath(worldName);
-        if (this.configuration.isConfigurationSection(legacyPath)) {
-            return legacyPath;
-        }
-        return currentPath;
-    }
-
-    private String writePath(final String worldName) {
-        final String currentPath = this.encodedPath(worldName);
-        if (this.configuration.isConfigurationSection(currentPath)) {
-            return currentPath;
-        }
-
-        this.migrateLegacyEntry(worldName);
-        return currentPath;
-    }
-
-    private String portalPath(final String worldName, final PortalKind portalKind, final boolean write) {
-        final String basePath = write ? this.writePath(worldName) : this.readPath(worldName);
-        return basePath + ".portals." + portalKind.configKey();
-    }
-
-    private boolean migrateLegacyEntry(final String worldName) {
-        final String currentPath = this.encodedPath(worldName);
-        if (this.configuration.isConfigurationSection(currentPath)) {
+    private boolean migrateEntries(final String rootPath) {
+        final ConfigurationSection root = this.configuration.getConfigurationSection(rootPath);
+        if (root == null) {
             return false;
         }
 
-        final String legacyPath = this.legacyPath(worldName);
-        if (!this.configuration.isConfigurationSection(legacyPath)) {
-            return false;
-        }
+        boolean migrated = false;
+        for (final String key : new ArrayList<>(root.getKeys(false))) {
+            final String path = rootPath + SEPARATOR + key;
+            if (!this.configuration.isConfigurationSection(path)) {
+                continue;
+            }
 
-        this.copySection(legacyPath, currentPath);
-        this.configuration.set(currentPath + ".name", this.requireWorldName(worldName));
-        this.configuration.set(legacyPath, null);
-        return true;
+            final String name = WorldNameRules.normalize(this.configuration.getString(path + "/name", key)).orElse(null);
+            if (name == null) {
+                this.plugin.getLogger().warning("Skipping invalid tracked world entry at '" + path + "'.");
+                continue;
+            }
+
+            final String targetPath = this.worldPath(name);
+            if (path.equals(targetPath)) {
+                continue;
+            }
+            if (!this.configuration.isConfigurationSection(targetPath)) {
+                this.copySection(path, targetPath);
+                this.configuration.set(targetPath + "/name", name);
+            }
+            this.configuration.set(path, null);
+            migrated = true;
+        }
+        return migrated;
     }
 
     private String requireWorldName(final String worldName) {
@@ -539,7 +486,7 @@ public final class WorldsFileStore {
                 return;
             }
 
-            final Path temp = this.file.resolveSibling(this.file.getFileName() + ".tmp");
+            final Path temp = this.file.resolveSibling(this.file.getFileName() + "/tmp");
             try {
                 Files.writeString(temp, snapshot, StandardCharsets.UTF_8);
                 try {
@@ -568,17 +515,17 @@ public final class WorldsFileStore {
     }
 
     private boolean hasSameSpawn(final String path, final String worldName, final Location location) {
-        if (!this.configuration.isConfigurationSection(path + ".spawn")) {
+        if (!this.configuration.isConfigurationSection(path + "/spawn")) {
             return false;
         }
-        if (!worldName.equals(this.configuration.getString(path + ".name"))) {
+        if (!worldName.equals(this.configuration.getString(path + "/name"))) {
             return false;
         }
-        return Double.compare(this.configuration.getDouble(path + ".spawn.x"), location.getX()) == 0
-            && Double.compare(this.configuration.getDouble(path + ".spawn.y"), location.getY()) == 0
-            && Double.compare(this.configuration.getDouble(path + ".spawn.z"), location.getZ()) == 0
-            && Float.compare((float) this.configuration.getDouble(path + ".spawn.yaw"), location.getYaw()) == 0
-            && Float.compare((float) this.configuration.getDouble(path + ".spawn.pitch"), location.getPitch()) == 0;
+        return Double.compare(this.configuration.getDouble(path + "/spawn/x"), location.getX()) == 0
+            && Double.compare(this.configuration.getDouble(path + "/spawn/y"), location.getY()) == 0
+            && Double.compare(this.configuration.getDouble(path + "/spawn/z"), location.getZ()) == 0
+            && Float.compare((float) this.configuration.getDouble(path + "/spawn/yaw"), location.getYaw()) == 0
+            && Float.compare((float) this.configuration.getDouble(path + "/spawn/pitch"), location.getPitch()) == 0;
     }
 
     private void copySection(final String sourcePath, final String targetPath) {
@@ -592,7 +539,7 @@ public final class WorldsFileStore {
             if (section.isConfigurationSection(key)) {
                 continue;
             }
-            this.configuration.set(targetPath + "." + key, section.get(key));
+            this.configuration.set(targetPath + SEPARATOR + key, section.get(key));
         }
     }
 }
